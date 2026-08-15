@@ -7,7 +7,8 @@ using Android.Views;
 namespace WheelSimu
 {
     /// <summary>
-    /// 自定义方向盘视图 — 赛车风格十字辐条（两横一竖）
+    /// 赛车风格方向盘 — 平底运动方向盘 + 发光角度弧 + 中心数字 HUD
+    /// 参考 Real Racing / GRID 手游的 HUD 设计
     /// </summary>
     public class SteeringWheelView : View
     {
@@ -17,16 +18,16 @@ namespace WheelSimu
         // Paints
         private Paint _bgPaint;
         private Paint _rimPaint;
-        private Paint _rimEdgePaint;
+        private Paint _rimGlowPaint;       // 轮辋外发光
         private Paint _spokePaint;
-        private Paint _spokeEdgePaint;
         private Paint _hubPaint;
         private Paint _hubInnerPaint;
-        private Paint _gripPaint;
         private Paint _markerPaint;
         private Paint _angleTextPaint;
-        private Paint _labelPaint;
-        private Paint _arcPaint;
+        private Paint _subTextPaint;
+        private Paint _arcBgPaint;         // 背景弧
+        private Paint _arcActivePaint;     // 激活角度弧（发光）
+        private Paint _centerRingPaint;    // 中心表盘外环
 
         private float _centerX, _centerY, _radius;
         private float _rimWidth;
@@ -49,26 +50,23 @@ namespace WheelSimu
 
         private void Init()
         {
-            // 背景 — 深色圆形底座
+            // 背景
             _bgPaint = new Paint { AntiAlias = true };
 
-            // 轮辋 (rim)
+            // 轮辋
             _rimPaint = new Paint { AntiAlias = true };
             _rimPaint.SetStyle(Paint.Style.Stroke);
 
-            _rimEdgePaint = new Paint { AntiAlias = true };
-            _rimEdgePaint.SetStyle(Paint.Style.Stroke);
-            _rimEdgePaint.StrokeWidth = 2.5f;
-            _rimEdgePaint.Color = Color.Argb(255, 150, 150, 160);
+            // 轮辋外发光（赛车霓虹效果）
+            _rimGlowPaint = new Paint { AntiAlias = true };
+            _rimGlowPaint.SetStyle(Paint.Style.Stroke);
+            _rimGlowPaint.StrokeWidth = 8f;
+            _rimGlowPaint.Color = Color.Argb(60, 0, 200, 255); // 青蓝发光
+            _rimGlowPaint.SetShadowLayer(12f, 0, 0, Color.Argb(120, 0, 200, 255));
 
-            // 辐条 (spokes)
+            // 辐条 — 碳纤维黑
             _spokePaint = new Paint { AntiAlias = true };
             _spokePaint.SetStyle(Paint.Style.Fill);
-
-            _spokeEdgePaint = new Paint { AntiAlias = true };
-            _spokeEdgePaint.SetStyle(Paint.Style.Stroke);
-            _spokeEdgePaint.Color = Color.Argb(255, 120, 120, 130);
-            _spokeEdgePaint.StrokeWidth = 2f;
 
             // 中心 Hub
             _hubPaint = new Paint { AntiAlias = true };
@@ -77,41 +75,53 @@ namespace WheelSimu
             _hubInnerPaint = new Paint { AntiAlias = true };
             _hubInnerPaint.SetStyle(Paint.Style.Fill);
 
-            // 握把凸起
-            _gripPaint = new Paint { AntiAlias = true };
-            _gripPaint.SetStyle(Paint.Style.Stroke);
-            _gripPaint.Color = Color.Argb(255, 65, 65, 75);
-            _gripPaint.StrokeWidth = 20f;
-            _gripPaint.StrokeCap = Paint.Cap.Round;
-
-            // 顶部正位标记
+            // 顶部正位标记 — 赛车红
             _markerPaint = new Paint { AntiAlias = true };
             _markerPaint.SetStyle(Paint.Style.FillAndStroke);
-            _markerPaint.StrokeWidth = 3f;
-            _markerPaint.Color = Color.Argb(255, 255, 60, 50);
+            _markerPaint.StrokeWidth = 2f;
+            _markerPaint.Color = Color.Argb(255, 255, 50, 50);
+            _markerPaint.SetShadowLayer(8f, 0, 0, Color.Argb(180, 255, 50, 50));
 
-            // 角度文字
+            // 角度大数字
             _angleTextPaint = new Paint
             {
                 AntiAlias = true,
-                Color = Color.Argb(255, 230, 230, 240),
-                TextSize = 32f,
+                Color = Color.Argb(255, 0, 255, 200),  // 青绿色 HUD 数字
+                TextSize = 42f,
                 TextAlign = Paint.Align.Center,
                 FakeBoldText = true,
             };
+            _angleTextPaint.SetShadowLayer(6f, 0, 0, Color.Argb(150, 0, 255, 200));
 
-            _labelPaint = new Paint
+            // 副标题
+            _subTextPaint = new Paint
             {
                 AntiAlias = true,
-                Color = Color.Argb(180, 160, 160, 170),
-                TextSize = 22f,
+                Color = Color.Argb(180, 120, 180, 200),
+                TextSize = 14f,
                 TextAlign = Paint.Align.Center,
             };
 
-            // 角度弧线
-            _arcPaint = new Paint { AntiAlias = true };
-            _arcPaint.SetStyle(Paint.Style.Stroke);
-            _arcPaint.StrokeWidth = 5f;
+            // 背景弧
+            _arcBgPaint = new Paint { AntiAlias = true };
+            _arcBgPaint.SetStyle(Paint.Style.Stroke);
+            _arcBgPaint.StrokeWidth = 4f;
+            _arcBgPaint.StrokeCap = Paint.Cap.Round;
+            _arcBgPaint.Color = Color.Argb(40, 120, 140, 160);
+
+            // 激活角度弧 — 发光青色
+            _arcActivePaint = new Paint { AntiAlias = true };
+            _arcActivePaint.SetStyle(Paint.Style.Stroke);
+            _arcActivePaint.StrokeWidth = 6f;
+            _arcActivePaint.StrokeCap = Paint.Cap.Round;
+            _arcActivePaint.Color = Color.Argb(220, 0, 220, 255);
+            _arcActivePaint.SetShadowLayer(10f, 0, 0, Color.Argb(180, 0, 220, 255));
+
+            // 中心表盘外环
+            _centerRingPaint = new Paint { AntiAlias = true };
+            _centerRingPaint.SetStyle(Paint.Style.Stroke);
+            _centerRingPaint.StrokeWidth = 2f;
+            _centerRingPaint.Color = Color.Argb(100, 0, 200, 255);
         }
 
         protected override void OnSizeChanged(int w, int h, int oldw, int oldh)
@@ -119,13 +129,12 @@ namespace WheelSimu
             base.OnSizeChanged(w, h, oldw, oldh);
             _centerX = w / 2f;
             _centerY = h / 2f;
-            _radius = Math.Min(w, h) / 2f - 24f;
-            _rimWidth = _radius * 0.13f;
+            _radius = Math.Min(w, h) / 2f - 28f;
+            _rimWidth = _radius * 0.12f;
             _rimPaint.StrokeWidth = _rimWidth;
 
-            // 裁剪路径：限制转动部分不得超出轮辋外缘
             _clipCircle = new Path();
-            _clipCircle.AddCircle(_centerX, _centerY, _radius + _rimWidth / 2f + 1f, Path.Direction.Cw);
+            _clipCircle.AddCircle(_centerX, _centerY, _radius + _rimWidth / 2f + 2f, Path.Direction.Cw);
         }
 
         protected override void OnDraw(Canvas canvas)
@@ -134,386 +143,279 @@ namespace WheelSimu
 
             DrawBackground(canvas);
 
+            // 外圈发光弧 (固定，不旋转)
+            DrawAngleArc(canvas);
+
             canvas.Save();
-
-            // ============ 旋转画布以绘制方向盘主体 ============
             canvas.Rotate(_smoothAngle, _centerX, _centerY);
-
-            // 裁剪：转动内容不超出轮辋外缘
             canvas.ClipPath(_clipCircle);
 
-            // 外环 — 金属质感
+            // 轮辋外发光
+            canvas.DrawCircle(_centerX, _centerY, _radius + _rimWidth / 2f + 4f, _rimGlowPaint);
+
+            // 轮辋
             DrawRim(canvas);
 
-            // 握把凸起 (上下左右四个位置)
-            DrawGrip(canvas, 0);    // 右
-            DrawGrip(canvas, 90);   // 下
-            DrawGrip(canvas, 180);  // 左
-            DrawGrip(canvas, 270);  // 上
-
-            // 辐条 — 十字型：两横杠 + 一竖杠
-            DrawCrossSpokes(canvas);
+            // 辐条 — 平底运动方向盘（Y 型）
+            DrawFlatBottomSpokes(canvas);
 
             // 中心轴承
             DrawHub(canvas);
 
             canvas.Restore();
 
-            // ============ 不旋转的固定标记 ============
+            // 固定标记
             DrawTopMarker(canvas);
             DrawTickMarks(canvas);
-            DrawAngleArc(canvas);
-            DrawAngleText(canvas);
+            DrawCenterHUD(canvas);
         }
 
         // ================================================================
-        //  背景
+        //  背景 — 深色径向渐变 + 外圈暗角
         // ================================================================
         private void DrawBackground(Canvas canvas)
         {
-            float bgSize = _radius + 30f;
+            float bgSize = _radius + 40f;
             var bgRect = new RectF(_centerX - bgSize, _centerY - bgSize,
                                    _centerX + bgSize, _centerY + bgSize);
 
-            // 柔和的深色圆形背景
             var bgGrad = new RadialGradient(_centerX, _centerY, bgSize,
-                new int[] { Color.Argb(255, 38, 38, 45), Color.Argb(255, 18, 18, 22) },
-                new float[] { 0.6f, 1f },
+                new int[] { Color.Argb(255, 22, 26, 35), Color.Argb(255, 10, 12, 18), Color.Argb(255, 5, 6, 10) },
+                new float[] { 0f, 0.7f, 1f },
                 Shader.TileMode.Clamp);
             _bgPaint.SetShader(bgGrad);
-            canvas.DrawRoundRect(bgRect, 30f, 30f, _bgPaint);
+            canvas.DrawRoundRect(bgRect, 24f, 24f, _bgPaint);
             _bgPaint.SetShader(null);
-
-            // 外圈细边框
-            var borderPaint = new Paint
-            {
-                AntiAlias = true,
-                Color = Color.Argb(80, 200, 200, 210),
-                StrokeWidth = 1.5f,
-            };
-            borderPaint.SetStyle(Paint.Style.Stroke);
-            canvas.DrawRoundRect(new RectF(bgRect.Left + 1, bgRect.Top + 1, bgRect.Right - 1, bgRect.Bottom - 1),
-                                 28f, 28f, borderPaint);
         }
 
         // ================================================================
-        //  轮辋 (外环) — 金属渐变
+        //  轮辋 — 碳纤维纹理 + 红色缝线
         // ================================================================
         private void DrawRim(Canvas canvas)
         {
-            // 金属银色渐变
+            // 主体：深色金属渐变
             var rimGradient = new SweepGradient(_centerX, _centerY,
                 new int[] {
-                    Color.Argb(255, 170, 175, 185),
-                    Color.Argb(255, 110, 115, 125),
-                    Color.Argb(255, 190, 195, 205),
-                    Color.Argb(255, 100, 105, 115),
-                    Color.Argb(255, 170, 175, 185)
+                    Color.Argb(255, 50, 52, 60),
+                    Color.Argb(255, 30, 32, 38),
+                    Color.Argb(255, 55, 57, 65),
+                    Color.Argb(255, 28, 30, 36),
+                    Color.Argb(255, 50, 52, 60)
                 },
                 new float[] { 0f, 0.25f, 0.5f, 0.75f, 1f });
             _rimPaint.SetShader(rimGradient);
             canvas.DrawCircle(_centerX, _centerY, _radius, _rimPaint);
             _rimPaint.SetShader(null);
 
-            // 外边缘亮线
-            canvas.DrawCircle(_centerX, _centerY, _radius + _rimWidth / 2f - 1f, _rimEdgePaint);
-            // 内边缘暗线
-            var innerEdge = new Paint(_rimEdgePaint);
-            innerEdge.Color = Color.Argb(255, 80, 80, 88);
-            canvas.DrawCircle(_centerX, _centerY, _radius - _rimWidth / 2f + 1f, innerEdge);
+            // 内外边缘亮线
+            var edgePaint = new Paint { AntiAlias = true };
+            edgePaint.SetStyle(Paint.Style.Stroke);
+            edgePaint.StrokeWidth = 1.5f;
 
-            // 环内部的细刻度环
-            var tickRing = new Paint
+            edgePaint.Color = Color.Argb(120, 180, 200, 220);
+            canvas.DrawCircle(_centerX, _centerY, _radius + _rimWidth / 2f - 1f, edgePaint);
+
+            edgePaint.Color = Color.Argb(80, 100, 110, 130);
+            canvas.DrawCircle(_centerX, _centerY, _radius - _rimWidth / 2f + 1f, edgePaint);
+
+            // 红色缝线（12 点位置正中）
+            var stitchPaint = new Paint { AntiAlias = true };
+            stitchPaint.SetStyle(Paint.Style.Stroke);
+            stitchPaint.StrokeWidth = 2f;
+            stitchPaint.Color = Color.Argb(200, 220, 40, 40);
+            float stitchR = _radius;
+            float stitchArc = 8f;
+            // 严格以 -90°（正上方）为中点对称分布
+            float[] offsets = { -8f, 0f, 8f };
+            foreach (float off in offsets)
             {
-                AntiAlias = true,
-                Color = Color.Argb(60, 180, 180, 190),
-                StrokeWidth = 1f,
-            };
-            tickRing.SetStyle(Paint.Style.Stroke);
-            canvas.DrawCircle(_centerX, _centerY, _radius - _rimWidth / 2f - 6f, tickRing);
+                float startAngle = -90 + off - stitchArc / 2f;
+                var oval = new RectF(_centerX - stitchR, _centerY - stitchR,
+                                     _centerX + stitchR, _centerY + stitchR);
+                canvas.DrawArc(oval, startAngle, stitchArc, false, stitchPaint);
+            }
         }
 
         // ================================================================
-        //  握把凸起 (方向盘上 grip bumps)
+        //  平底运动方向盘辐条 (Y 型 / 两横一竖平底)
         // ================================================================
-        private void DrawGrip(Canvas canvas, float angleDeg)
+        private void DrawFlatBottomSpokes(Canvas canvas)
         {
-            float arcLen = 28f;
-            var oval = new RectF(_centerX - _radius, _centerY - _radius,
-                                 _centerX + _radius, _centerY + _radius);
-            canvas.DrawArc(oval, angleDeg - arcLen / 2f, arcLen, false, _gripPaint);
-        }
-
-        // ================================================================
-        //  十字辐条：两横杠 (← →) + 一竖杠 (↑)
-        // ================================================================
-        private void DrawCrossSpokes(Canvas canvas)
-        {
-            float hubRadius = _radius * 0.18f;
+            float hubRadius = _radius * 0.20f;
             float innerRimR = _radius - _rimWidth / 2f;
-            float spokeHalfW = _radius * 0.06f;  // 辐条半宽
+            float spokeHalfW = _radius * 0.07f;
 
-            // 横杠上下两条边，构成一个粗横杠
-            // 辐条从 hub 延伸到轮辋内侧
-
-            // --- 两横杠 (0° → 180°) ---
-            // 上横杠边
-            float topSpokeCenterY = _centerY - _radius * 0.08f;
-            float botSpokeCenterY = _centerY + _radius * 0.08f;
-
-            // 上横杠
-            DrawSingleSpokeRect(canvas, _centerX - innerRimR, topSpokeCenterY - spokeHalfW,
-                                _centerX + innerRimR, topSpokeCenterY + spokeHalfW);
-            // 下横杠
-            DrawSingleSpokeRect(canvas, _centerX - innerRimR, botSpokeCenterY - spokeHalfW,
-                                _centerX + innerRimR, botSpokeCenterY + spokeHalfW);
-
-            // --- 一竖杠 (270° → 90°, 即向上) ---
-            float vertSpokeCenterX = _centerX;
-            DrawSingleSpokeRect(canvas, vertSpokeCenterX - spokeHalfW, _centerY - innerRimR,
-                                vertSpokeCenterX + spokeHalfW, _centerY - hubRadius);
-
-            // 辐条与轮辋连接的倒角小三角 (美观)
-            DrawSpokeGusset(canvas, -innerRimR, topSpokeCenterY - spokeHalfW, topSpokeCenterY + spokeHalfW, true);
-            DrawSpokeGusset(canvas, innerRimR, topSpokeCenterY - spokeHalfW, topSpokeCenterY + spokeHalfW, true);
-            DrawSpokeGusset(canvas, -innerRimR, botSpokeCenterY - spokeHalfW, botSpokeCenterY + spokeHalfW, true);
-            DrawSpokeGusset(canvas, innerRimR, botSpokeCenterY - spokeHalfW, botSpokeCenterY + spokeHalfW, true);
-            DrawSpokeGusset(canvas, vertSpokeCenterX, 0, 0, false);
-        }
-
-        private void DrawSingleSpokeRect(Canvas canvas, float left, float top, float right, float bottom)
-        {
-            // 渐变色填充
-            var spokeGrad = new LinearGradient(left, top, right, bottom,
-                new int[] { Color.Argb(255, 90, 90, 100), Color.Argb(255, 55, 55, 62) },
-                new float[] { 0f, 1f },
+            // 碳纤维渐变
+            var spokeGrad = new LinearGradient(0, _centerY - spokeHalfW, 0, _centerY + spokeHalfW,
+                new int[] { Color.Argb(255, 45, 47, 55), Color.Argb(255, 25, 27, 33), Color.Argb(255, 40, 42, 50) },
+                new float[] { 0f, 0.5f, 1f },
                 Shader.TileMode.Clamp);
             _spokePaint.SetShader(spokeGrad);
-            canvas.DrawRect(new RectF(left, top, right, bottom), _spokePaint);
+
+            // 左横杠
+            DrawSpoke(canvas, _centerX - innerRimR, _centerY - spokeHalfW,
+                      _centerX - hubRadius, _centerY + spokeHalfW);
+
+            // 右横杠
+            DrawSpoke(canvas, _centerX + hubRadius, _centerY - spokeHalfW,
+                      _centerX + innerRimR, _centerY + spokeHalfW);
+
+            // 上竖杠
+            DrawSpoke(canvas, _centerX - spokeHalfW, _centerY - innerRimR,
+                      _centerX + spokeHalfW, _centerY - hubRadius);
+
             _spokePaint.SetShader(null);
 
-            // 边框
-            var rect = new RectF(left, top, right, bottom);
-            canvas.DrawRect(rect, _spokeEdgePaint);
+            // 辐条边缘高光
+            var highlightPaint = new Paint { AntiAlias = true };
+            highlightPaint.SetStyle(Paint.Style.Stroke);
+            highlightPaint.StrokeWidth = 1f;
+            highlightPaint.Color = Color.Argb(50, 200, 220, 255);
+            canvas.DrawLine(_centerX - innerRimR, _centerY - spokeHalfW, _centerX - hubRadius, _centerY - spokeHalfW, highlightPaint);
+            canvas.DrawLine(_centerX + hubRadius, _centerY - spokeHalfW, _centerX + innerRimR, _centerY - spokeHalfW, highlightPaint);
+            canvas.DrawLine(_centerX - spokeHalfW, _centerY - innerRimR, _centerX - spokeHalfW, _centerY - hubRadius, highlightPaint);
 
-            // 高光线
-            var highlight = new Paint
-            {
-                AntiAlias = true,
-                Color = Color.Argb(60, 220, 220, 230),
-                StrokeWidth = 1.2f,
-            };
-            highlight.SetStyle(Paint.Style.Stroke);
-            canvas.DrawLine(left, top + 1, right, top + 1, highlight);
+            // 竖向梁中线（中心高亮）
+            var centerLinePaint = new Paint { AntiAlias = true };
+            centerLinePaint.SetStyle(Paint.Style.Stroke);
+            centerLinePaint.StrokeWidth = 1.5f;
+            centerLinePaint.Color = Color.Argb(160, 200, 220, 255);
+            canvas.DrawLine(_centerX, _centerY - innerRimR, _centerX, _centerY - hubRadius, centerLinePaint);
         }
 
-        // 辐条与轮辋连接的夹角填充
-        private void DrawSpokeGusset(Canvas canvas, float xCenter, float yEdge1, float yEdge2, bool isHorizontal)
+        private void DrawSpoke(Canvas canvas, float left, float top, float right, float bottom)
         {
-            var path = new Path();
-            float rimR = _radius - _rimWidth / 2f;
-            float hubR = _radius * 0.18f;
-            float gussetSize = _radius * 0.05f;
+            canvas.DrawRect(new RectF(left, top, right, bottom), _spokePaint);
 
-            if (isHorizontal)
-            {
-                // 横杠末端的倒角
-                float sign = xCenter > 0 ? -1 : 1;
-                path.MoveTo(xCenter, yEdge1);
-                path.LineTo(xCenter + sign * gussetSize, yEdge1);
-                path.LineTo(xCenter + sign * gussetSize, yEdge2);
-                path.LineTo(xCenter, yEdge2);
-            }
-            else
-            {
-                // 竖杠顶端的倒角
-                path.MoveTo(xCenter - (_radius * 0.06f), _centerY - rimR);
-                path.LineTo(xCenter - (_radius * 0.06f), _centerY - rimR + gussetSize);
-                path.LineTo(xCenter + (_radius * 0.06f), _centerY - rimR + gussetSize);
-                path.LineTo(xCenter + (_radius * 0.06f), _centerY - rimR);
-            }
-
-            var gussetPaint = new Paint
-            {
-                AntiAlias = true,
-                Color = Color.Argb(255, 70, 70, 78),
-            };
-            gussetPaint.SetStyle(Paint.Style.Fill);
-            canvas.DrawPath(path, gussetPaint);
+            var edgePaint = new Paint { AntiAlias = true };
+            edgePaint.SetStyle(Paint.Style.Stroke);
+            edgePaint.StrokeWidth = 1f;
+            edgePaint.Color = Color.Argb(100, 80, 85, 95);
+            canvas.DrawRect(new RectF(left, top, right, bottom), edgePaint);
         }
 
         // ================================================================
-        //  中心轴承 (Hub)
+        //  中心轴承 — 碳纤维 + 青色发光环
         // ================================================================
         private void DrawHub(Canvas canvas)
         {
-            float hubR = _radius * 0.18f;
+            float hubR = _radius * 0.20f;
 
-            // 外圈 — 金属齿轮感
-            var hubOuterGrad = new RadialGradient(_centerX, _centerY, hubR,
-                new int[] { Color.Argb(255, 200, 200, 215), Color.Argb(255, 130, 130, 145), Color.Argb(255, 80, 80, 90) },
-                new float[] { 0f, 0.55f, 1f },
+            // 外环 — 青色发光
+            canvas.DrawCircle(_centerX, _centerY, hubR + 2f, _centerRingPaint);
+
+            // 金属外圈
+            var hubGrad = new RadialGradient(_centerX, _centerY, hubR,
+                new int[] { Color.Argb(255, 90, 95, 110), Color.Argb(255, 50, 52, 62), Color.Argb(255, 30, 32, 40) },
+                new float[] { 0f, 0.6f, 1f },
                 Shader.TileMode.Clamp);
-            _hubPaint.SetShader(hubOuterGrad);
+            _hubPaint.SetShader(hubGrad);
             canvas.DrawCircle(_centerX, _centerY, hubR, _hubPaint);
             _hubPaint.SetShader(null);
 
-            // 外圈边框
-            var hubEdge = new Paint
-            {
-                AntiAlias = true,
-                Color = Color.Argb(255, 180, 180, 195),
-                StrokeWidth = 2f,
-            };
-            hubEdge.SetStyle(Paint.Style.Stroke);
-            canvas.DrawCircle(_centerX, _centerY, hubR, hubEdge);
-
-            // 内圈 — 深色凹陷
-            float innerR = hubR * 0.55f;
-            var hubInnerGrad = new RadialGradient(_centerX, _centerY, innerR,
-                new int[] { Color.Argb(255, 40, 40, 46), Color.Argb(255, 20, 20, 25) },
-                new float[] { 0f, 1f },
-                Shader.TileMode.Clamp);
-            _hubInnerPaint.SetShader(hubInnerGrad);
+            // 内圈深色
+            float innerR = hubR * 0.70f;
+            var innerGrad = new RadialGradient(_centerX, _centerY, innerR,
+                new int[] { Color.Argb(255, 20, 22, 30), Color.Argb(255, 8, 10, 15) },
+                null, Shader.TileMode.Clamp);
+            _hubInnerPaint.SetShader(innerGrad);
             canvas.DrawCircle(_centerX, _centerY, innerR, _hubInnerPaint);
             _hubInnerPaint.SetShader(null);
 
             // 内圈边框
-            var innerEdge = new Paint
-            {
-                AntiAlias = true,
-                Color = Color.Argb(255, 100, 100, 110),
-                StrokeWidth = 1.5f,
-            };
+            var innerEdge = new Paint { AntiAlias = true };
             innerEdge.SetStyle(Paint.Style.Stroke);
+            innerEdge.StrokeWidth = 1.5f;
+            innerEdge.Color = Color.Argb(120, 0, 180, 220);
             canvas.DrawCircle(_centerX, _centerY, innerR, innerEdge);
-
-            // 中心小圆点 — 亮色
-            var dotPaint = new Paint
-            {
-                AntiAlias = true,
-                Color = Color.Argb(255, 200, 200, 215),
-            };
-            dotPaint.SetStyle(Paint.Style.Fill);
-            canvas.DrawCircle(_centerX, _centerY, hubR * 0.12f, dotPaint);
-
-            // 十字螺丝纹
-            float screwW = hubR * 0.35f;
-            float screwThick = 3f;
-            var screwPaint = new Paint
-            {
-                AntiAlias = true,
-                Color = Color.Argb(200, 180, 180, 195),
-                StrokeWidth = screwThick,
-                StrokeCap = Paint.Cap.Round,
-            };
-            screwPaint.SetStyle(Paint.Style.Stroke);
-            canvas.DrawLine(_centerX - screwW, _centerY, _centerX + screwW, _centerY, screwPaint);
-            canvas.DrawLine(_centerX, _centerY - screwW, _centerX, _centerY + screwW, screwPaint);
         }
 
         // ================================================================
-        //  顶部正位标记 (红色三角，不随方向盘旋转)
+        //  顶部正位标记 — 赛车红三角 + 发光
         // ================================================================
         private void DrawTopMarker(Canvas canvas)
         {
-            float outerY = _centerY - _radius - _rimWidth / 2f - 3f;
-            float innerY = outerY + 24f;
-            float halfW = 10f;
+            float outerY = _centerY - _radius - _rimWidth / 2f - 6f;
+            float innerY = outerY + 18f;
+            float halfW = 8f;
 
             var path = new Path();
-            path.MoveTo(_centerX, outerY);                    // 尖端朝上
+            path.MoveTo(_centerX, outerY);
             path.LineTo(_centerX - halfW, innerY);
             path.LineTo(_centerX + halfW, innerY);
             path.Close();
-
             canvas.DrawPath(path, _markerPaint);
-
-            // 底部白色小标记
-            var whiteDot = new Paint
-            {
-                AntiAlias = true,
-                Color = Color.Argb(255, 255, 255, 255),
-            };
-            whiteDot.SetStyle(Paint.Style.Fill);
-            canvas.DrawCircle(_centerX, _centerY - _radius - _rimWidth / 2f - 1f, 4f, whiteDot);
         }
 
         // ================================================================
-        //  刻度标记 (±90°, 每30°)
+        //  刻度标记 — 每 15°，±90° 范围
         // ================================================================
         private void DrawTickMarks(Canvas canvas)
         {
-            for (int a = -90; a <= 90; a += 30)
+            float outerBase = _radius - _rimWidth / 2f - 10f;
+            for (int a = -90; a <= 90; a += 15)
             {
                 float rad = a * MathF.PI / 180f;
-                float outerBase = _radius - _rimWidth / 2f - 8f;
-                float innerBase = outerBase - 10f;
+                bool isMajor = a % 30 == 0;
+                float tickLen = isMajor ? 12f : 6f;
+                float innerBase = outerBase - tickLen;
 
                 float cos = MathF.Cos(rad);
                 float sin = MathF.Sin(rad);
-
                 float x1 = _centerX + innerBase * sin;
                 float y1 = _centerY - innerBase * cos;
                 float x2 = _centerX + outerBase * sin;
                 float y2 = _centerY - outerBase * cos;
 
-                var tickPaint = new Paint
-                {
-                    AntiAlias = true,
-                    Color = a == 0 ? Color.Argb(200, 255, 80, 80) : Color.Argb(140, 180, 180, 190),
-                    StrokeWidth = a % 60 == 0 ? 3.5f : 2f,
-                    StrokeCap = Paint.Cap.Round,
-                };
+                var tickPaint = new Paint { AntiAlias = true };
                 tickPaint.SetStyle(Paint.Style.Stroke);
+                tickPaint.StrokeCap = Paint.Cap.Round;
+                tickPaint.StrokeWidth = isMajor ? 3f : 1.5f;
+
+                if (a == 0)
+                {
+                    tickPaint.Color = Color.Argb(220, 255, 60, 60);
+                    tickPaint.SetShadowLayer(4f, 0, 0, Color.Argb(100, 255, 60, 60));
+                }
+                else
+                {
+                    tickPaint.Color = Color.Argb(isMajor ? 160 : 80, 160, 180, 200);
+                }
                 canvas.DrawLine(x1, y1, x2, y2, tickPaint);
             }
         }
 
         // ================================================================
-        //  角度弧线指示
+        //  角度弧线 — 发光青色，随角度增长
         // ================================================================
         private void DrawAngleArc(Canvas canvas)
         {
-            float margin = 12f;
+            float margin = 16f;
             var oval = new RectF(_centerX - _radius + margin, _centerY - _radius + margin,
                                  _centerX + _radius - margin, _centerY + _radius - margin);
 
-            // 背景弧 (灰色全范围 -90 ~ +90)
-            var bgArc = new Paint
-            {
-                AntiAlias = true,
-                Color = Color.Argb(30, 200, 200, 200),
-                StrokeWidth = 5f,
-                StrokeCap = Paint.Cap.Round,
-            };
-            bgArc.SetStyle(Paint.Style.Stroke);
-            canvas.DrawArc(oval, -180, 180, false, bgArc);
+            // 背景弧
+            canvas.DrawArc(oval, -180, 180, false, _arcBgPaint);
 
-            // 当前角度弧 (高亮)
+            // 当前角度弧
             float sweep = -_angle;
             if (Math.Abs(sweep) > 0.5f)
             {
-                var activeArc = new Paint
-                {
-                    AntiAlias = true,
-                    Color = Color.Argb(160, 0, 200, 255),
-                    StrokeWidth = 5f,
-                    StrokeCap = Paint.Cap.Round,
-                };
-                activeArc.SetStyle(Paint.Style.Stroke);
-                canvas.DrawArc(oval, -90, sweep, false, activeArc);
+                canvas.DrawArc(oval, -90, sweep, false, _arcActivePaint);
             }
         }
 
         // ================================================================
-        //  角度数值显示
+        //  中心 HUD — 大数字角度 + 副标题
         // ================================================================
-        private void DrawAngleText(Canvas canvas)
+        private void DrawCenterHUD(Canvas canvas)
         {
-            float textY = _centerY - _radius - 55f;
-            canvas.DrawText($"{_angle:F1}°", _centerX, textY, _angleTextPaint);
-            canvas.DrawText("STEERING", _centerX, textY + 28f, _labelPaint);
+            // 角度数值（中心位置）
+            float textY = _centerY + _angleTextPaint.TextSize * 0.35f;
+            canvas.DrawText($"{_angle:F0}°", _centerX, textY, _angleTextPaint);
+
+            // 副标题
+            canvas.DrawText("STEER", _centerX, _centerY + 28f, _subTextPaint);
         }
     }
 }

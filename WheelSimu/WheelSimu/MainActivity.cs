@@ -47,12 +47,16 @@ namespace WheelSimu
         Button btnGearDown;
         Button btnClearAngle;
         Button btnNetMode;
+        Button btnLayoutSwitch;  // 布局切换按钮
         Switch SteerEnableSwitch;
         ToggleButton HandbrakeSwitch;
         SteeringWheelView steeringWheel;
 
         /// <summary>连接模式: 0=TCP, 1=UDP, 2=蓝牙</summary>
         private int mConnectMode = 0;
+
+        /// <summary>布局模式: 0=赛车HUD, 1=模拟方向盘</summary>
+        private int _layoutMode = 0;
 
         // 踏板垂直进度条
         PedalGaugeView gaugeThrottle;
@@ -138,7 +142,11 @@ namespace WheelSimu
             try
             {
                 base.OnCreate(savedInstanceState);
-                SetContentView(Resource.Layout.activity_main);
+
+                // 读取布局偏好：0=赛车HUD(content_main), 1=模拟方向盘(content_wheel)
+                var prefs = GetSharedPreferences("WheelSimuPrefs", FileCreationMode.Private);
+                _layoutMode = prefs.GetInt("LayoutMode", 0);
+                SetContentView(_layoutMode == 0 ? Resource.Layout.activity_main : Resource.Layout.activity_wheel);
 
 
             //保持屏幕常亮
@@ -156,12 +164,12 @@ namespace WheelSimu
             IPText = FindViewById<EditText>(Resource.Id.IPText1);
 
             // 读取已保存的IP地址
-            var prefs = GetSharedPreferences("WheelSimuPrefs", FileCreationMode.Private);
             IPText.Text = prefs.GetString("LastIP", "192.168.1.100:5050");
 
             btnConnect = FindViewById<Button>(Resource.Id.Connect);
             btnConnect.Text = "重连: 开";  // 初始状态：自动重连开启
             btnNetMode = FindViewById<Button>(Resource.Id.btnNetMode);
+            btnLayoutSwitch = FindViewById<Button>(Resource.Id.btnLayoutSwitch);
             btnSet = FindViewById<Button>(Resource.Id.btnSet);
             btnReset = FindViewById<Button>(Resource.Id.btnReset);
             btnSetSrd = FindViewById<Button>(Resource.Id.btnSetSrd);
@@ -241,6 +249,17 @@ namespace WheelSimu
                 BtnNetMode_OnClick();
             };
 
+            btnLayoutSwitch.Click += delegate
+            {
+                // 切换布局模式并重启 Activity
+                _layoutMode = _layoutMode == 0 ? 1 : 0;
+                var p = GetSharedPreferences("WheelSimuPrefs", FileCreationMode.Private);
+                p.Edit().PutInt("LayoutMode", _layoutMode).Commit();
+                // 保存当前IP（Recreate 会重新读取）
+                p.Edit().PutString("LastIP", IPText.Text).Commit();
+                Recreate();
+            };
+
             btnClearAngle.Click += delegate
             {
                 ThreadPool.QueueUserWorkItem(o => BtnClearAngle_OnClick());
@@ -286,7 +305,7 @@ namespace WheelSimu
                 if (!string.IsNullOrEmpty(ip))
                 {
                     LogToUI($"自动连接 {ip} ...");
-                    BtnConnect_OnClick();
+                    ConnectNow(ip);
                 }
                 else
                 {
@@ -599,50 +618,21 @@ namespace WheelSimu
             btnNetMode.Text = modes[mConnectMode];
         }
 
-        private void BtnConnect_OnClick()
+        /// <summary>发起连接（不切换自动重连开关），失败时按自动重连策略处理</summary>
+        private void ConnectNow(string ipOverride = null)
         {
+            string ip = ipOverride ?? IPText.Text?.Trim();
+            if (string.IsNullOrEmpty(ip))
+            {
+                RunOnUiThread(() => textView3.Text = "等待服务器广播...");
+                RunOnUiThread(() => btnConnect.Enabled = true);
+                return;
+            }
+
+            RunOnUiThread(() => btnConnect.Enabled = false);
             try
             {
-                if (!mAutoReconnect)
-                {
-                    // === 打开自动重连 ===
-                    mAutoReconnect = true;
-                    RunOnUiThread(() => btnConnect.Text = "重连: 开");
-                    RunOnUiThread(() => btnConnect.Enabled = false);
-                    RunOnUiThread(() => textView2.Text = "自动连接中...");
-
-                    // 有 IP 就立即尝试连接
-                    string ip = IPText.Text?.Trim();
-                    if (string.IsNullOrEmpty(ip))
-                    {
-                        RunOnUiThread(() => textView3.Text = "等待服务器广播...");
-                        RunOnUiThread(() => btnConnect.Enabled = true);
-                        return;
-                    }
-
-                    DoConnect(ip);
-                }
-                else if (IsConnected)
-                {
-                    // === 关闭连接（不禁用自动重连，只是断开） ===
-                    RunOnUiThread(() => btnConnect.Enabled = false);
-                    Sct[1]?.Close();
-                    IsConnected = false;
-                    RunOnUiThread(() => textView3.Text = "已断开");
-                    RunOnUiThread(() => btnConnect.Enabled = true);
-                }
-                else
-                {
-                    // === 手动连接（自动重连已开但未连接） ===
-                    string ip = IPText.Text?.Trim();
-                    if (string.IsNullOrEmpty(ip))
-                    {
-                        RunOnUiThread(() => textView3.Text = "请先输入服务器IP");
-                        return;
-                    }
-                    RunOnUiThread(() => btnConnect.Enabled = false);
-                    DoConnect(ip);
-                }
+                DoConnect(ip);
             }
             catch (Exception ex)
             {
@@ -654,6 +644,29 @@ namespace WheelSimu
 
                 if (mAutoReconnect)
                     ScheduleReconnect();
+            }
+        }
+
+        private void BtnConnect_OnClick()
+        {
+            if (!mAutoReconnect)
+            {
+                // === 打开自动重连：连接并启用断线自动重连 ===
+                mAutoReconnect = true;
+                RunOnUiThread(() => btnConnect.Text = "重连: 开");
+                RunOnUiThread(() => textView2.Text = "自动重连: 开");
+                ConnectNow();
+            }
+            else
+            {
+                // === 关闭自动重连：断开连接并停止重连 ===
+                mAutoReconnect = false;
+                CancelReconnect();
+                Sct[1]?.Close();
+                IsConnected = false;
+                RunOnUiThread(() => btnConnect.Text = "重连: 关");
+                RunOnUiThread(() => textView3.Text = "已断开 (自动重连: 关)");
+                RunOnUiThread(() => btnConnect.Enabled = true);
             }
         }
 
@@ -869,7 +882,7 @@ namespace WheelSimu
                                                 if (!IsConnected && mAutoReconnect)
                                                 {
                                                     btnConnect.Enabled = false;
-                                                    BtnConnect_OnClick();
+                                                    try { ConnectNow(server); } catch { }
                                                 }
                                             });
                                         }
@@ -936,7 +949,7 @@ namespace WheelSimu
                 {
                     if (!IsConnected && mAutoReconnect)
                     {
-                        try { BtnConnect_OnClick(); } catch { }
+                        try { ConnectNow(); } catch { }
                     }
                 });
             }, null, 3000, Timeout.Infinite);

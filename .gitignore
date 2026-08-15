@@ -28,3 +28,6 @@ vssver.scc
 
 # Server build
 WheelSimuServer/WheelSimuServer.csproj.user
+
+# AI working memory / tooling data
+.codebuddy/

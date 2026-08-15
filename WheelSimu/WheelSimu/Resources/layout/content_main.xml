@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- ================================================================
-    内容布局 — 模拟赛车驾驶舱 (美化版)
-    所有控件ID与MainActivity.cs保持兼容
+    内容布局 — 模拟赛车驾驶舱 (合理规划版)
+    左: 刹车 + 档位 | 中: 方向盘(大) + 控制按钮 | 右: 油门 + 离合 + 手刹
     ================================================================ -->
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
@@ -9,7 +9,7 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="#080A0E"
-    android:padding="8dp">
+    android:padding="6dp">
 
     <!-- ========== 隐藏的旧控件 — 保持兼容 ========== -->
     <TextView android:id="@+id/textView1" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone" />
@@ -24,66 +24,66 @@
     <Button android:id="@+id/btnSetSrd" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone" />
     <Button android:id="@+id/btnSetSru" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone" />
 
-    <!-- ========== 顶部状态栏 ========== -->
+    <!-- ========== 顶部状态栏（紧凑） ========== -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="36dp"
+        android:layout_height="34dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:paddingHorizontal="12dp"
+        android:paddingHorizontal="10dp"
         android:background="@drawable/round_rect_bg">
+
         <TextView
-            android:layout_width="0dp"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="SIM COCKPIT"
+            android:text="SIM"
             android:textColor="#FF4FC3F7"
-            android:textSize="14sp"
+            android:textSize="13sp"
             android:textStyle="bold"
             android:letterSpacing="0.1" />
-        <!-- 状态文字 — 与标题同一行 -->
+
+        <!-- 状态文字 -->
         <TextView
             android:id="@+id/textView3"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1.5"
+            android:layout_weight="1"
             android:text="A=0 B=0 T=0 C=0 HB=OFF"
             android:textColor="#99808890"
             android:textSize="9sp"
             android:fontFamily="monospace"
             android:singleLine="true"
-            android:ellipsize="marquee"
-            android:marqueeRepeatLimit="marquee_forever"
-            android:focusable="true"
-            android:focusableInTouchMode="true"
-            android:scrollHorizontally="true"
-            android:gravity="end"
-            android:layout_marginEnd="4dp" />
+            android:ellipsize="end"
+            android:gravity="center"
+            android:layout_marginHorizontal="8dp" />
+
         <EditText
             android:id="@+id/IPText1"
-            android:layout_width="130dp"
+            android:layout_width="120dp"
             android:layout_height="26dp"
             android:inputType="text"
-            android:text="192.168.1.100:8088"
+            android:text="192.168.1.100:5050"
             android:textColor="#FF8A9CA8"
             android:textSize="10sp"
             android:background="@drawable/edit_bg"
-            android:paddingHorizontal="8dp"
-            android:singleLine="true"
-            android:layout_marginEnd="6dp" />
+            android:paddingHorizontal="6dp"
+            android:singleLine="true" />
+
         <Button
             android:id="@+id/Connect"
-            android:layout_width="50dp"
+            android:layout_width="46dp"
             android:layout_height="26dp"
             android:text="连接"
             android:textColor="#E0E0E0"
             android:textSize="10sp"
             android:textStyle="bold"
             android:background="@drawable/btn_accent"
-            android:paddingHorizontal="0dp" />
+            android:paddingHorizontal="0dp"
+            android:layout_marginStart="4dp" />
+
         <Button
             android:id="@+id/btnNetMode"
-            android:layout_width="36dp"
+            android:layout_width="34dp"
             android:layout_height="26dp"
             android:text="TCP"
             android:textColor="#80DEEA"
@@ -92,53 +92,85 @@
             android:background="@drawable/btn_dark_small"
             android:paddingHorizontal="0dp"
             android:layout_marginStart="4dp" />
+
+        <!-- 布局切换按钮 -->
+        <Button
+            android:id="@+id/btnLayoutSwitch"
+            android:layout_width="34dp"
+            android:layout_height="26dp"
+            android:text="L1"
+            android:textColor="#FFFFB74D"
+            android:textSize="9sp"
+            android:textStyle="bold"
+            android:background="@drawable/btn_dark_small"
+            android:paddingHorizontal="0dp"
+            android:layout_marginStart="4dp" />
+
         <TextView
             android:id="@+id/textView_Ver"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="#555D65"
             android:textSize="9sp"
-            android:layout_marginStart="10dp" />
+            android:layout_marginStart="6dp" />
     </LinearLayout>
 
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:layout_marginVertical="5dp"
+        android:layout_marginVertical="4dp"
         android:background="#18222B" />
 
-    <!-- ========== 中间主体三列布局 ========== -->
+    <!-- ========== 中间主体三列布局（方向盘优先） ========== -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
         android:orientation="horizontal"
-        android:gravity="center">
+        android:weightSum="10">
 
-        <!-- ===== 左栏 — 踏板控制区 ===== -->
+        <!-- ===== 左栏 — 刹车 + 档位 (weight=2.2) ===== -->
         <LinearLayout
-            android:layout_width="80dp"
+            android:layout_width="0dp"
             android:layout_height="match_parent"
+            android:layout_weight="2.2"
             android:orientation="vertical"
             android:gravity="center_horizontal"
-            android:paddingVertical="4dp">
+            android:paddingHorizontal="2dp">
 
-            <FrameLayout
-                android:id="@+id/gaugeThrottle"
+            <!-- 档位按钮（赛车方块样式） -->
+            <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
-                android:layout_marginBottom="4dp" />
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:layout_marginBottom="4dp">
+                <Button
+                    android:id="@+id/btnGearDown"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="42dp"
+                    android:text="▼ 降"
+                    android:textColor="#FFFF5252"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:background="@drawable/btn_dark" />
+                <Button
+                    android:id="@+id/btnGearUp"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="42dp"
+                    android:text="▲ 升"
+                    android:textColor="#FF69F0AE"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:layout_marginStart="4dp"
+                    android:background="@drawable/btn_dark" />
+            </LinearLayout>
 
+            <!-- 刹车 (填满剩余空间) -->
             <FrameLayout
                 android:id="@+id/gaugeBrake"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
-                android:layout_marginBottom="4dp" />
-
-            <FrameLayout
-                android:id="@+id/gaugeClutch"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_weight="1" />
@@ -147,94 +179,61 @@
         <View
             android:layout_width="1dp"
             android:layout_height="match_parent"
-            android:layout_marginHorizontal="5dp"
+            android:layout_marginHorizontal="4dp"
             android:background="#15222C" />
 
-        <!-- ===== 中间 — 方向盘 (居中放大) ===== -->
+        <!-- ===== 中间 — 方向盘 (weight=4.6, 最大) ===== -->
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_weight="1"
+            android:layout_weight="4.6"
             android:orientation="vertical"
             android:gravity="center">
 
-            <!-- 方向盘 FrameLayout 容器 (代码中add SteeringWheelView到这里) -->
+            <!-- 方向盘容器 -->
             <FrameLayout
                 android:id="@+id/steeringWheelContainer"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_weight="1"
-                android:layout_margin="4dp" />
+                android:layout_margin="2dp" />
 
-            <!-- 底部状态指示 + 控制按钮 -->
+            <!-- 控制按钮行 -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
+                android:orientation="horizontal"
                 android:gravity="center"
-                android:layout_marginTop="2dp">
+                android:layout_marginTop="4dp">
 
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center"
-                    android:layout_marginBottom="6dp">
-                    <Button
-                        android:id="@+id/btnClearAngle"
-                        android:layout_width="100dp"
-                        android:layout_height="30dp"
-                        android:text="归零角度"
-                        android:textColor="#FF80DEEA"
-                        android:textSize="11sp"
-                        android:textStyle="bold"
-                        android:background="@drawable/btn_accent"
-                        android:layout_marginEnd="12dp" />
-                    <LinearLayout
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="方向盘: "
-                            android:textColor="#8878909C"
-                            android:textSize="10sp"
-                            android:layout_marginEnd="4dp" />
-                        <Switch
-                            android:id="@+id/SteerEnableSwitch"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content" />
-                    </LinearLayout>
-                </LinearLayout>
+                <Button
+                    android:id="@+id/btnClearAngle"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="30dp"
+                    android:text="归零"
+                    android:textColor="#FF80DEEA"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:background="@drawable/btn_accent" />
 
                 <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
                     android:orientation="horizontal"
-                    android:gravity="center">
+                    android:layout_marginStart="12dp">
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="← L"
-                        android:textColor="#2A4555"
-                        android:textSize="9sp"
-                        android:layout_marginEnd="10dp" />
-                    <TextView
+                        android:text="方向盘"
+                        android:textColor="#8878909C"
+                        android:textSize="10sp"
+                        android:layout_marginEnd="4dp" />
+                    <Switch
+                        android:id="@+id/SteerEnableSwitch"
                         android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="CENTER"
-                        android:textColor="#2A3845"
-                        android:textSize="9sp"
-                        android:textStyle="bold" />
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="R →"
-                        android:textColor="#2A4555"
-                        android:textSize="9sp"
-                        android:layout_marginStart="10dp" />
+                        android:layout_height="wrap_content" />
                 </LinearLayout>
             </LinearLayout>
         </LinearLayout>
@@ -242,65 +241,46 @@
         <View
             android:layout_width="1dp"
             android:layout_height="match_parent"
-            android:layout_marginHorizontal="5dp"
+            android:layout_marginHorizontal="4dp"
             android:background="#15222C" />
 
-        <!-- ===== 右栏 — 档位 + 手刹 ===== -->
+        <!-- ===== 右栏 — 油门 + 离合 + 手刹 (weight=2.2) ===== -->
         <LinearLayout
-            android:layout_width="80dp"
+            android:layout_width="0dp"
             android:layout_height="match_parent"
+            android:layout_weight="2.2"
             android:orientation="vertical"
             android:gravity="center_horizontal"
-            android:paddingVertical="4dp">
+            android:paddingHorizontal="2dp">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="档位"
-                android:textColor="#FF4FC3F7"
-                android:textSize="10sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="3dp" />
-
-            <Button
-                android:id="@+id/btnGearUp"
+            <!-- 离合 (上半) -->
+            <FrameLayout
+                android:id="@+id/gaugeClutch"
                 android:layout_width="match_parent"
-                android:layout_height="42dp"
-                android:text="升档"
-                android:textColor="#E0E0E0"
-                android:textSize="14sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="3dp"
-                android:background="@drawable/btn_dark" />
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:layout_marginBottom="4dp" />
 
-            <Button
-                android:id="@+id/btnGearDown"
-                android:layout_width="match_parent"
-                android:layout_height="42dp"
-                android:text="降档"
-                android:textColor="#E0E0E0"
-                android:textSize="14sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="5dp"
-                android:background="@drawable/btn_dark" />
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:layout_marginVertical="4dp"
-                android:background="#15222C" />
-
+            <!-- 手刹（赛车红警示样式） -->
             <ToggleButton
                 android:id="@+id/HandbrakeSwitch"
                 android:layout_width="match_parent"
-                android:layout_height="44dp"
-                android:textOff="手刹 关"
-                android:textOn="手刹 开"
-                android:textColor="#E0E0E0"
+                android:layout_height="42dp"
+                android:textOff="▣ 手刹"
+                android:textOn="■ 手刹"
+                android:textColor="#FFFF5252"
                 android:textSize="14sp"
                 android:textStyle="bold"
                 android:background="@drawable/btn_dark"
-                android:gravity="center" />
+                android:gravity="center"
+                android:layout_marginBottom="4dp" />
+
+            <!-- 油门 (下半) -->
+            <FrameLayout
+                android:id="@+id/gaugeThrottle"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
         </LinearLayout>
     </LinearLayout>
 
