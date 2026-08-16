@@ -3,14 +3,14 @@
 WheelSimu 是一套「**手机当方向盘，PC 玩游戏**」的赛车外设方案：
 
 - **Android 手机** 通过重力/陀螺仪感应方向盘角度，屏幕上模拟油门/刹车/档位踏板；
-- **PC 服务端** 接收手机发来的数据，转换为 **vJoy 虚拟手柄**（DirectInput）或 **WinUHid 虚拟 Xbox One 手柄**（XInput）输出给游戏；
+- **PC 服务端** 接收手机发来的数据，转换为 **WinUHid 虚拟手柄**（Xbox One 方向盘或手柄）输出给游戏；
 - 无需购买实体方向盘，手机横屏固定在支架上即可畅玩赛车游戏。
 
 ```
 手机（WheelSimu App）              PC（WheelSimuServer）                 游戏
 ┌────────────────┐  TCP/WiFi  ┌──────────────────────────────┐  HID   ┌────────┐
 │ 陀螺仪感应角度   │ ──────────→ │ 角度/油门/刹车/档位/手刹         │ ─────→ │ 识别为  │
-│ 触摸屏模拟踏板   │            │ 输出方式: vJoy / WinUHid(Xbox) │        │ 手柄/   │
+│ 触摸屏模拟踏板   │            │ 输出方式: WinUHid(Xbox) 方向盘/手柄 │       │ 手柄/   │
 │ 升档/降档按钮   │            │ (顶部下拉随时切换)             │        │ 方向盘  │
 └────────────────┘            └──────────────────────────────┘        └────────┘
 ```
@@ -35,11 +35,11 @@ WheelSimu 是一套「**手机当方向盘，PC 玩游戏**」的赛车外设方
 
 - **方向盘模拟**：陀螺仪/重力感应检测 540°~900° 转向角度，实时映射输出
 - **三踏板系统**：油门、刹车、离合器独立模拟，触摸滑动控制
-- **档位控制**：升档 / 降档按钮（映射为手柄 A/B 键或 vJoy 按钮）
-- **手刹开关**：一键手刹（映射为 LB 键）
-- **双输出模式**（PC 端顶部下拉随时切换）：
-  - **WinUHid (Xbox One)**：虚拟 Xbox One 手柄，XInput 接口，**现代游戏全兼容**（Forza / WRC / F1 / GTA / 欧卡等），推荐默认
-  - **vJoy 虚拟手柄**：DirectInput 接口，用于较老只认 DirectInput 的游戏，作为回退
+- **档位控制**：升档 / 降档按钮（映射为手柄拨片 RB/LB 或方向盘按钮 1/2）
+- **手刹开关**：一键手刹（映射为 B 键）
+- **两种输出模式**（PC 端顶部下拉随时切换）：
+  - **WinUHid (方向盘)**：虚拟方向盘（XInput Xbox One 标准方向盘布局），X 轴转向 + 三踏板独立通道，**默认推荐**
+  - **WinUHid (Xbox One)**：虚拟 Xbox One 手柄，XInput 接口，现代游戏全兼容（Forza / WRC / F1 / GTA / 欧卡等）
 - **零部署**：WinUHid 驱动已内嵌 EXE，首次运行自动安装，无需手动装驱动
 - **网络连接**：TCP 直连 + UDP 局域网自动发现，自动重连
 - **系统托盘**：可最小化隐藏到托盘，后台持续运行
@@ -61,11 +61,10 @@ WheelSimu 是一套「**手机当方向盘，PC 玩游戏**」的赛车外设方
 ### 驱动依赖
 | 输出模式 | 需要安装的驱动 | 说明 |
 |---|---|---|
-| **WinUHid (Xbox One)** | `WinUHidDriver.dll`（UMDF 2.23 + VHF） | **已内嵌进 EXE，自动安装**。首次运行自动开启测试签名并装好驱动（可能需重启一次）；设备管理器出现 `WinUHid Virtual HID Enumerator` 即成功 |
-| **vJoy 虚拟手柄** | vJoy 驱动 | 需手动安装（可选，仅 DirectInput 老游戏用）；设备管理器出现 `vJoy Device` 即成功 |
+| **WinUHid (方向盘 / Xbox One)** | `WinUHidDriver.dll`（UMDF 2.23 + VHF） | **已内嵌进 EXE，自动安装**。首次运行自动开启测试签名并装好驱动（可能需重启一次）；设备管理器出现 `WinUHid Virtual HID Enumerator` 即成功 |
 
 > WinUHid 驱动**完全无需手动安装**：驱动文件（INF/DLL/CAT/CER）已打包进 `WheelSimuServer.exe`，程序首次启动会自动完成「开启测试签名 → 导入证书 → 安装驱动」全流程。
-> 两套驱动可以**同时存在**，运行时通过顶部下拉随意切换，互不干扰。
+> 两种输出模式共用同一套 WinUHid 驱动，运行时通过顶部下拉随意切换，互不干扰。
 
 ---
 
@@ -83,15 +82,7 @@ WheelSimu 是一套「**手机当方向盘，PC 玩游戏**」的赛车外设方
 
 > 注意：**首次安装驱动需重启一次电脑**（开启测试签名模式的硬性要求，无法绕过）。这是用户唯一需要手动做的一步。
 
-### 第 2 步：安装 vJoy 驱动（可选，DirectInput 老游戏用）
-
-1. 安装 vJoy 驱动；
-2. 打开 **vJoy 配置**（vJoyConf），确保**设备 1** 启用以下轴/按钮：
-   - X Axis（方向盘）
-   - Buttons 1~8（档位、手刹等）
-3. 服务器启动时会自动获取设备 1 控制权。
-
-### 第 3 步：安装 Android 端 App
+### 第 2 步：安装 Android 端 App
 
 将 `Release/WheelSimu.apk` 传到手机并安装（需允许"安装未知来源应用"）。
 
@@ -102,12 +93,8 @@ WheelSimu 是一套「**手机当方向盘，PC 玩游戏**」的赛车外设方
 ### 一、启动 PC 服务器
 
 1. 双击 `WheelSimuServer.exe`（**必须以管理员身份运行**，UAC 弹窗选"是"）；
-2. 服务器自动：
-   - 检测并初始化 vJoy 驱动；
-   - 检测 WinUHid 驱动可用性；
-   - 监听 **TCP 5050**（数据端口），UDP **5051** 广播（自动发现）；
+2. 服务器自动检测并安装 WinUHid 驱动，监听 **TCP 5050**（数据端口），UDP **5051** 广播（自动发现）；
 3. 底部状态栏查看：
-   - `vJoy: OK` — vJoy 就绪
    - `IP: 192.168.x.x:5050` — 手机需要连接的地址
    - `客户端: 0` — 当前已连接的手机数
    - `消息: 0` — 收到的数据包计数
@@ -136,31 +123,35 @@ WheelSimu 是一套「**手机当方向盘，PC 玩游戏**」的赛车外设方
 
 | 下拉选项 | 含义 | 适用 |
 |---|---|---|
-| `vJoy 虚拟手柄` | DirectInput 手柄 | 老游戏 / 只认 DirectInput |
-| `WinUHid (Xbox One)` | **XInput Xbox One 手柄** | **现代游戏（默认推荐）** |
+| `WinUHid (方向盘)` | **虚拟方向盘**（XInput，方向盘布局） | **默认推荐**，三踏板独立通道、档位按钮齐全 |
+| `WinUHid (Xbox One)` | **XInput Xbox One 手柄** | 个别只认标准手柄的游戏 |
 
-切换后日志区会提示"WinUHid Xbox One 虚拟手柄已创建"或"已切换回 vJoy 输出"。
+切换后日志区会提示"WinUHid 方向盘虚拟设备已创建"或"WinUHid Xbox One 虚拟手柄已创建"。
 
 ### 四、开始游戏
 
 1. 手机横屏固定在方向盘支架上，打开 App 并连接成功；
-2. 在游戏中打开手柄设置，应能看到一个 **Xbox One 手柄**（WinUHid 模式）或 **vJoy 手柄**（vJoy 模式）；
+2. 在游戏中打开手柄设置，应能看到一个 **Xbox One 方向盘** 或 **Xbox One 手柄**（WinUHid 模式）；
 3. 转动手机 / 方向盘 → 游戏内方向盘跟随转动，即可开始游戏。
 
 ---
 
 ## 操作对照表
 
-| 游戏操作 | 手机操作 | WinUHid 输出 | vJoy 输出 |
+| 游戏操作 | 手机操作 | WinUHid (方向盘) 输出 | WinUHid (Xbox One) 输出 |
 |---|---|---|---|
-| 转向 | 左右倾斜/旋转手机（陀螺仪） | 左摇杆 X 轴 | X 轴 |
-| 油门 | 按住油门踏板滑动 | 左扳机 (LT) | 油门轴 |
-| 刹车 | 按住刹车踏板滑动 | 右扳机 (RT) | 刹车轴 |
-| 离合器 | 按离合踏板（手动挡） | —（预留） | 离合轴 |
-| 升档 | 点"升档"按钮 | A 键 | 按钮 1 |
-| 降档 | 点"降档"按钮 | B 键 | 按钮 2 |
-| 手刹 | 手刹开关 | LB 键 | 按钮 3 |
-| 回正 | 点"回正角度"按钮 | 摇杆回中 | 轴回中 |
+| 转向 | 左右倾斜/旋转手机（陀螺仪） | 方向盘 X 轴（1:1 角度） | 左摇杆 X 轴 |
+| 油门 | 按住油门踏板滑动 | 油门通道（独立） | 右扳机 (RT) |
+| 刹车 | 按住刹车踏板滑动 | 刹车通道（独立） | 左扳机 (LT) |
+| 离合器 | 按离合踏板（手动挡） | 离合通道（独立） | 右摇杆 Y 轴 |
+| 升档 | 点"升档"按钮 | 按钮 1 | RB（右拨片） |
+| 降档 | 点"降档"按钮 | 按钮 2 | LB（左拨片） |
+| 手刹 | 手刹开关 | 按钮 3 | B 键 |
+| 自动挡 D | 挡位开关 D | 按钮 4（并拉满油门） | Y 键（并拉满油门） |
+| 自动挡 R | 挡位开关 R | 按钮 5（并拉满油门） | X 键（并拉满油门） |
+| 手动挡 R | 手动挡 R | 按钮 6 | Back 键 |
+| 手动挡 1~6 | 手动挡 1~6 档 | 按钮 7~12 | A/X/Y/LB/RB/Menu |
+| 回正 | 点"回正角度"按钮 | 轴回中 | 摇杆回中 |
 
 > 油门与刹车互斥：同时踩下时优先保留后踩的一侧（防误操作）。
 
@@ -200,8 +191,8 @@ WheelSimu/
 ├── WheelSimuServer/               # PC 服务端（C# / WinForms）
 │   ├── MainForm.cs                # 主窗体：TCP 服务、双输出调度、UI
 │   ├── WinUHidDeviceManager.cs    # WinUHid(Xbox One) P/Invoke 封装
+│   ├── WinUHidWheelDeviceManager.cs # WinUHid(方向盘) P/Invoke 封装
 │   ├── WinUHidDriverInstaller.cs  # 驱动零部署自动安装（内嵌资源解压+签名+SetupAPI）
-│   ├── VJoyDeviceManager.cs       # vJoy 输出封装
 │   ├── Driver/                    # 内嵌驱动源文件（INF/DLL/CAT/CER）
 │   ├── app.manifest               # 管理员提权（requireAdministrator）
 │   └── WheelSimuServer.csproj     # 自包含单文件发布
@@ -218,9 +209,8 @@ WheelSimu/
 ### PC 服务端
 
 ```bash
-# 需要 .NET 8.0 SDK；引用的 vJoy/WinUHid DLL 按 csproj 中绝对路径加载
 cd WheelSimuServer
-dotnet publish -c Release   # 产物在 bin/Release/net8.0-windows/win-x64/publish
+dotnet publish -c Release   # 产物在 bin/Release/net10.0-windows/win-x64/publish
 ```
 
 ### Android 端
@@ -234,12 +224,12 @@ dotnet publish -c Release   # 产物在 bin/Release/net8.0-windows/win-x64/publi
 **Q1：启动时 UAC 弹窗？**
 A：正常。WinUHid 虚拟设备仅允许管理员访问，程序通过 `app.manifest` 强制提权。请点"是"。
 
-**Q2：下拉切换到 WinUHid 时提示"驱动不可用 / 切换失败"？**
+**Q2：下拉切换 WinUHid 时提示"驱动不可用 / 切换失败"？**
 A：WinUHid 驱动未安装或未启用测试签名。正常情况下首次运行会自动安装；若失败，检查：
 ① 是否以管理员身份运行；② 是否已完成重启（开启测试签名需重启生效）；③ 按 [安装步骤](#第-1-步安装-pc-端服务器winuhid-驱动全自动) 手动重装。
 
 **Q3：游戏里没看到手柄 / 手柄无反应？**
-A：① 先确认服务器日志"WinUHid Xbox One 虚拟手柄已创建"或 vJoy 状态为 OK；② 在游戏设置里重新扫描手柄；③ 若用 vJoy，确认 vJoyConf 中设备 1 已启用 X 轴与按钮。
+A：① 先确认服务器日志"WinUHid ... 已创建"；② 在游戏设置里重新扫描手柄；③ 检查底部数据行 `BTN=0x…` 是否有按钮输出。
 
 **Q4：手机连不上服务器？**
 A：① 确认手机与 PC 同一局域网；② 检查 Windows 防火墙是否放行 TCP 5050 与 UDP 5051（首次运行请允许弹窗）；③ 可手动输入 IP 连接（格式 `192.168.x.x:5050`）。
@@ -248,13 +238,13 @@ A：① 确认手机与 PC 同一局域网；② 检查 Windows 防火墙是否�
 A：把手机反过来装，或在 App 内反转传感器方向（设置里调整）。
 
 **Q6：油门/刹车有延迟？**
-A：服务器对扳机做了平滑过渡（约 30 步/满行程），属正常手感；若延迟明显，检查 WiFi 信号。
+A：游戏对扳机做了平滑过渡，属正常手感；若延迟明显，检查 WiFi 信号。
 
 **Q7：两种输出模式能同时用吗？**
-A：能同时安装驱动，但**同一时刻只输出一个**（按顶部下拉选择），避免游戏识别到两个手柄混乱。
+A：同一时刻只输出一个（按顶部下拉选择），避免游戏识别到两个手柄混乱。
 
-**Q8：vJoy 状态显示 MISS / 未就绪？**
-A：vJoy 驱动未安装，或 vJoyConf 中设备未启用。此情况下仍可切换到 WinUHid 输出。
+**Q8：手机转 90° 游戏只转 45°？**
+A：新版已修复角度映射（等效比例 `angle/450`），方向盘模式与手机角度 1:1 对应；请更新 `Release/WheelSimuServer.exe`。
 
 ---
 
@@ -265,5 +255,4 @@ A：vJoy 驱动未安装，或 vJoyConf 中设备未启用。此情况下仍可�
 ## 致谢
 
 - [WinUHid (lurebat)](https://github.com/lurebat/WinUHid) — 虚拟 HID 框架 + Xbox One 预设驱动
-- [vJoy](https://sourceforge.net/projects/vjoy/) — 虚拟手柄驱动
 - [Xamarin.Android](https://dotnet.microsoft.com/en-us/apps/xamarin/android) — Android 应用开发框架

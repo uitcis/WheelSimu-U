@@ -14,7 +14,7 @@ namespace WheelSimuServer;
 ///   1. 检测/开启测试签名模式（bcdedit /set testsigning on，需重启）
 ///   2. 检测/导入驱动签名证书（Root + TrustedPublisher）
 ///   3. 用 SetupAPI 创建 root 设备 + newdev 安装驱动
-/// 仅 WinUHid（UMDF 用户态驱动）支持自动安装；vJoy 仍需用户手动安装。
+/// 仅 WinUHid（UMDF 用户态驱动）支持自动安装。
 /// </summary>
 public static class WinUHidDriverInstaller
 {

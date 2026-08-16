@@ -19,17 +19,6 @@
 
   <ItemGroup>
     <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
-    <!-- vJoy SDK 已拉取到 G:\vJoy\SDK\c#\x64\（原 G:\方向盘\vJoy，2026-08-16 改为 ASCII 路径） -->
-    <Content Include="G:\vJoy\SDK\c#\x64\vJoyInterface.dll">
-      <Link>vJoyInterface.dll</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
-    <Content Include="G:\vJoy\SDK\c#\x64\vJoyInterfaceWrap.dll">
-      <Link>vJoyInterfaceWrap.dll</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
     <!-- WinUHid (lurebat) 已编译产物，2026-08-16 -->
     <Content Include="G:\WinUHid-lurebat\WinUHid\build\Release\x64\WinUHid.dll">
       <Link>WinUHid.dll</Link>

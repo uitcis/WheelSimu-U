@@ -9,64 +9,24 @@ namespace WheelSimuServer;
 
 public partial class MainForm : Form
 {
-    // ==================== vJoy P/Invoke ====================
-    const int VJD_STAT_FREE = 0;
-    const int VJD_STAT_OWN = 3;
-    const int VJOY_AXIS_MAX = 32768;
-    const uint VJOY_DEVICE_ID = 1;
-
-    [StructLayout(LayoutKind.Sequential)]
-    struct JState
-    {
-        public byte bDevice;
-        public int wThrottle, wRudder, wAileron, wAxisX, wAxisY, wAxisZ;
-        public int wAxisXRot, wAxisYRot, wAxisZRot, wSlider, wDial, wWheel;
-        public int wAxisVX, wAxisVY, wAxisVZ, wAxisVBRX, wAxisVBRY, wAxisVBRZ;
-        public int lButtons;
-        public uint bHats, bHatsEx1, bHatsEx2, bHatsEx3;
-    }
-
-    [DllImport("vJoyInterface.dll", CallingConvention = CallingConvention.Cdecl)]
-    static extern bool vJoyEnabled();
-    [DllImport("vJoyInterface.dll", CallingConvention = CallingConvention.Cdecl)]
-    static extern int GetVJDStatus(uint rID);
-    [DllImport("vJoyInterface.dll", CallingConvention = CallingConvention.Cdecl)]
-    static extern bool AcquireVJD(uint rID);
-    [DllImport("vJoyInterface.dll", CallingConvention = CallingConvention.Cdecl)]
-    static extern void RelinquishVJD(uint rID);
-    [DllImport("vJoyInterface.dll", CallingConvention = CallingConvention.Cdecl)]
-    static extern bool UpdateVJD(uint rID, ref JState pData);
-    [DllImport("vJoyInterface.dll", CallingConvention = CallingConvention.Cdecl)]
-    static extern bool ResetVJD(uint rID);
-    [DllImport("vJoyInterface.dll", CallingConvention = CallingConvention.Cdecl)]
-    static extern bool EnableVJD(uint rID);
-    [DllImport("vJoyInterface.dll", CallingConvention = CallingConvention.Cdecl)]
-    static extern bool DisableVJD(uint rID);
-    [DllImport("vJoyInterface.dll", CallingConvention = CallingConvention.Cdecl)]
-    static extern bool SetAutoManageDevices(bool enable);
-
     // ==================== 配置 ====================
     const int LISTEN_PORT = 5050;
     const int DISCOVERY_PORT = 5051;
     const string DISCOVERY_MAGIC = "WHEELSIMU_SERVER";
     const int MAX_LOG_LINES = 1000;
-    const int SMOOTH_STEP = VJOY_AXIS_MAX / 30;
 
     // ==================== 状态 ====================
-    enum OutputMode { VJoy = 0, WinUHid = 1 }
-    OutputMode _outputMode = OutputMode.VJoy;
+    enum OutputMode { WinUHid = 0, WinUHidWheel = 1 }
+    OutputMode _outputMode = OutputMode.WinUHidWheel;
     bool _uiReady;          // UI 初始化完成标志（防止 Load 前触发切换）
     bool xoneReady;
+    bool wheelReady;
     readonly WinUHidDeviceManager xoneMgr = new();
+    readonly WinUHidWheelDeviceManager wheelMgr = new();
 
-    volatile bool vJoyReady;
-    readonly object vJoyLock = new();
     CancellationTokenSource? _cts;
     bool _isExiting;
-
-    // vJoy 平滑状态
-    double lastAngle;
-    int lastThrottle, lastBrake, lastClutch, lastAxisXRot;
+    bool _restoringFromTray;    // 从托盘恢复窗口期间，跳过 Resize 自动隐藏
 
     // 统计
     int msgCount;
@@ -76,7 +36,6 @@ public partial class MainForm : Form
     // ==================== UI 控件 ====================
     RichTextBox rtbLogs = null!;
     StatusStrip statusBar = null!;
-    ToolStripStatusLabel lblVJoy = null!;
     ToolStripStatusLabel lblIP = null!;
     ToolStripStatusLabel lblClient = null!;
     ToolStripStatusLabel lblMsgCount = null!;
@@ -125,7 +84,7 @@ public partial class MainForm : Form
         };
         pnlTop.Controls.Add(lblTitle);
 
-        // === 输出方式选择（vJoy / WinUHid） ===
+        // === 输出方式选择（WinUHid） ===
         var lblOut = new Label
         {
             Text = "输出方式:",
@@ -141,8 +100,8 @@ public partial class MainForm : Form
             Location = new Point(pnlTop.Width - 165, 8),
             Anchor = AnchorStyles.Top | AnchorStyles.Right
         };
-        cmbOutput.Items.Add("vJoy 虚拟手柄");
         cmbOutput.Items.Add("WinUHid (Xbox One)");
+        cmbOutput.Items.Add("WinUHid (方向盘)");
         cmbOutput.SelectedIndexChanged += CmbOutput_SelectedIndexChanged;
         pnlTop.Controls.Add(lblOut);
         pnlTop.Controls.Add(cmbOutput);
@@ -162,9 +121,22 @@ public partial class MainForm : Form
             BorderStyle = BorderStyle.None,
             WordWrap = true,
             DetectUrls = false,
-            ShortcutsEnabled = false,
+            ShortcutsEnabled = true,   // 允许 Ctrl+C / Ctrl+A 复制日志
         };
         pnlMain.Controls.Add(rtbLogs);
+
+        // 日志右键菜单：方便复制
+        var logMenu = new ContextMenuStrip();
+        logMenu.Items.Add("复制选中", null, (s, e) => rtbLogs.Copy());
+        logMenu.Items.Add("复制全部", null, (s, e) =>
+        {
+            rtbLogs.SelectAll();
+            rtbLogs.Copy();
+            rtbLogs.DeselectAll();
+        });
+        logMenu.Items.Add(new ToolStripSeparator());
+        logMenu.Items.Add("清空日志", null, (s, e) => rtbLogs.Clear());
+        rtbLogs.ContextMenuStrip = logMenu;
 
         // === 底部固定数据行 ===
         lblData = new Label
@@ -190,11 +162,9 @@ public partial class MainForm : Form
             ForeColor = Color.FromArgb(200, 200, 200),
             SizingGrip = false
         };
-        lblVJoy = new ToolStripStatusLabel { Text = "vJoy: 检测中...", Padding = new Padding(6, 0, 12, 0) };
-        lblIP = new ToolStripStatusLabel { Text = "IP: ---", Padding = new Padding(0, 0, 12, 0) };
+        lblIP = new ToolStripStatusLabel { Text = "IP: ---", Padding = new Padding(6, 0, 12, 0) };
         lblClient = new ToolStripStatusLabel { Text = "客户端: 0", Padding = new Padding(0, 0, 12, 0) };
         lblMsgCount = new ToolStripStatusLabel { Text = "消息: 0" };
-        statusBar.Items.Add(lblVJoy);
         statusBar.Items.Add(lblIP);
         statusBar.Items.Add(lblClient);
         statusBar.Items.Add(lblMsgCount);
@@ -255,15 +225,26 @@ public partial class MainForm : Form
             ContextMenuStrip = menu,
             Visible = true
         };
-        trayIcon.MouseDoubleClick += (_, _) => ShowWindow();
+        trayIcon.DoubleClick += (_, _) => ShowWindow();
     }
 
     void ShowWindow()
     {
-        Show();
-        WindowState = FormWindowState.Normal;
-        ShowInTaskbar = true;
-        Activate();
+        _restoringFromTray = true;
+        try
+        {
+            Show();
+            WindowState = FormWindowState.Normal;
+            ShowInTaskbar = true;
+            BringToFront();
+            TopMost = true;
+            TopMost = false;
+            Activate();
+        }
+        finally
+        {
+            _restoringFromTray = false;
+        }
     }
 
     void HideToTray()
@@ -281,70 +262,41 @@ public partial class MainForm : Form
         Log("=================================");
         Log("");
 
-        // vJoy 诊断
-        try
-        {
-            VJoyDiag.Run(s => Log($"  {s}"));
-        }
-        catch (Exception ex)
-        {
-            Log($"vJoy 诊断异常: {ex.Message}");
-        }
+        // UI 初始化完成，输出方式默认 WinUHid 方向盘
+        // 必须放在最前：保证窗口立即可用，不等待耗时的驱动初始化
+        _uiReady = true;
+        cmbOutput.SelectedIndex = (int)OutputMode.WinUHidWheel;
 
+        string ip = GetLocalIP();
+        Log($"本机 IP: {ip}");
+        Log($"监听端口: {LISTEN_PORT}");
+        UpdateStatusUI($"IP: {ip}:{LISTEN_PORT}");
+
+        // 启动服务器（不依赖驱动初始化，立即启动）
+        _cts = new CancellationTokenSource();
+        _ = RunServer(_cts.Token);
+
+        if (ShowInTaskbar)
+        {
+            Log("关闭窗口将最小化到托盘，右键托盘图标可退出");
+        }
         Log("");
 
-        // 自动启用 vJoy 设备（运行时才出现，避免干扰 Xbox 手柄）
-        // 优先使用 vJoy 内置的通用自动管理 API（EnableVJD），失败则降级到本地方法
-        try
-        {
-            SetAutoManageDevices(true);
-            if (EnableVJD(VJOY_DEVICE_ID))
-                Log("已启用 vJoy 设备（自动管理模式）");
-            else
-                Log("注意: 启用 vJoy 设备失败（将以仅转发模式运行）");
-        }
-        catch (Exception ex)
-        {
-            Log($"自动启用 vJoy 设备异常: {ex.Message}（降级到本地方法）");
-            try
-            {
-                if (VJoyDeviceManager.EnableDevice(out var enableMsg))
-                    Log(enableMsg);
-                else
-                    Log($"注意: {enableMsg}（将以仅转发模式运行）");
-            }
-            catch (Exception ex2)
-            {
-                Log($"本地启用 vJoy 设备异常: {ex2.Message}");
-            }
-        }
+        // 耗时初始化（WinUHid 驱动检测与安装）放到后台线程。
+        // EnsureReady 会跑 pnputil /add-driver，可能阻塞数秒，
+        // 期间托盘双击/右键消息全部排队 -> 表现为"点了很久才有反应"。
+        _ = Task.Run(InitOutputsInBackground);
+    }
 
-        // 初始化 vJoy
-        try
-        {
-            vJoyReady = InitVJoy();
-        }
-        catch (Exception ex)
-        {
-            Log($"vJoy 异常: {ex.Message}");
-        }
-
-        if (vJoyReady)
-        {
-            UpdateStatusUI("vJoy: OK", "vJoy 就绪");
-        }
-        else
-        {
-            Log("vJoy 未就绪，仅转发数据，不输出虚拟手柄");
-            UpdateStatusUI("vJoy: OFF", "vJoy 未就绪");
-        }
-
+    // ==================== 后台驱动初始化（不阻塞 UI） ====================
+    void InitOutputsInBackground()
+    {
         // WinUHid 驱动检测 + 零部署自动安装
         try
         {
             if (WinUHidDeviceManager.DriverAvailable())
             {
-                Log("WinUHid 驱动已就绪（可在顶部切换 Xbox One 手柄输出）");
+                Log("WinUHid 驱动已就绪（可在顶部切换 Xbox One 手柄 / 方向盘输出）");
             }
             else
             {
@@ -358,17 +310,17 @@ public partial class MainForm : Form
                         break;
                     case WinUHidDriverInstaller.InstallState.RebootRequired:
                         Log($"WinUHid: {detail}");
-                        MessageBox.Show(
+                        BeginInvoke(() => MessageBox.Show(
                             detail + "\n\n重启完成后请再次运行本程序。",
                             "需要重启电脑",
-                            MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            MessageBoxButtons.OK, MessageBoxIcon.Information));
                         break;
                     default:
                         Log($"WinUHid: {detail}");
-                        MessageBox.Show(
+                        BeginInvoke(() => MessageBox.Show(
                             "WinUHid 驱动自动安装失败：\n" + detail + "\n\n可尝试手动安装（见 README）。",
                             "驱动安装失败",
-                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning));
                         break;
                 }
             }
@@ -377,25 +329,6 @@ public partial class MainForm : Form
         {
             Log($"WinUHid 检测异常: {ex.Message}");
         }
-
-        // UI 初始化完成，输出方式默认 vJoy
-        _uiReady = true;
-        cmbOutput.SelectedIndex = (int)OutputMode.VJoy;
-
-        string ip = GetLocalIP();
-        Log($"本机 IP: {ip}");
-        Log($"监听端口: {LISTEN_PORT}");
-        UpdateStatusUI(null, null, $"IP: {ip}:{LISTEN_PORT}");
-
-        // 启动服务器
-        _cts = new CancellationTokenSource();
-        _ = RunServer(_cts.Token);
-
-        if (ShowInTaskbar)
-        {
-            Log("关闭窗口将最小化到托盘，右键托盘图标可退出");
-        }
-        Log("");
     }
 
     void MainForm_FormClosing(object? sender, FormClosingEventArgs e)
@@ -410,44 +343,8 @@ public partial class MainForm : Form
 
         // 真正退出
         _cts?.Cancel();
-        if (vJoyReady)
-        {
-            try
-            {
-                JState zero = new() { bDevice = (byte)VJOY_DEVICE_ID };
-                UpdateVJD(VJOY_DEVICE_ID, ref zero);
-                RelinquishVJD(VJOY_DEVICE_ID);
-                Log("vJoy 设备已释放");
-            }
-            catch { }
-        }
 
-        // 自动禁用 vJoy 设备（从系统中移除，Xbox 手柄恢复正常）
-        // 优先使用 vJoy 内置的通用自动管理 API（DisableVJD），失败则降级到本地方法
-        try
-        {
-            if (DisableVJD(VJOY_DEVICE_ID))
-                Log("已禁用 vJoy 设备（自动管理模式）");
-            else
-                Log("注意: 禁用 vJoy 设备失败，建议手动用 vJoyConf 禁用");
-        }
-        catch (Exception ex)
-        {
-            Log($"自动禁用 vJoy 设备异常: {ex.Message}（降级到本地方法）");
-            try
-            {
-                if (VJoyDeviceManager.DisableDevice(out var disableMsg))
-                    Log(disableMsg);
-                else
-                    Log($"注意: {disableMsg}（vJoy 设备可能仍残留，建议手动用 vJoyConf 禁用）");
-            }
-            catch (Exception ex2)
-            {
-                Log($"本地禁用 vJoy 设备异常: {ex2.Message}");
-            }
-        }
-
-        // 释放 WinUHid 虚拟手柄
+        // 释放 WinUHid 虚拟设备
         try
         {
             xoneMgr.Dispose();
@@ -455,7 +352,16 @@ public partial class MainForm : Form
         }
         catch (Exception ex)
         {
-            Log($"释放 WinUHid 异常: {ex.Message}");
+            Log($"释放 WinUHid Xbox One 异常: {ex.Message}");
+        }
+        try
+        {
+            wheelMgr.Dispose();
+            Log("WinUHid 方向盘设备已释放");
+        }
+        catch (Exception ex)
+        {
+            Log($"释放 WinUHid 方向盘异常: {ex.Message}");
         }
 
         trayIcon.Visible = false;
@@ -464,6 +370,7 @@ public partial class MainForm : Form
 
     void MainForm_Resize(object? sender, EventArgs e)
     {
+        if (_restoringFromTray) return;
         if (WindowState == FormWindowState.Minimized)
         {
             HideToTray();
@@ -497,59 +404,19 @@ public partial class MainForm : Form
         rtbLogs.ScrollToCaret();
     }
 
-    void UpdateStatusUI(string? vJoyText = null, string? trayText = null, string? ipText = null)
+    void UpdateStatusUI(string? trayText = null, string? ipText = null)
     {
         if (InvokeRequired)
         {
-            BeginInvoke(() => UpdateStatusUI(vJoyText, trayText, ipText));
+            BeginInvoke(() => UpdateStatusUI(trayText, ipText));
             return;
         }
 
-        if (vJoyText != null) lblVJoy.Text = vJoyText;
         if (ipText != null) lblIP.Text = ipText;
         if (trayText != null) trayIcon.Text = "WheelSimu Server - " + trayText;
 
         lblClient.Text = $"客户端: {clientCount}";
         lblMsgCount.Text = $"消息: {msgCount}";
-    }
-
-    // ==================== vJoy 初始化 ====================
-    bool InitVJoy()
-    {
-        try
-        {
-            if (!vJoyEnabled())
-            {
-                Log("vJoy 驱动未启用，请安装并配置 vJoy");
-                return false;
-            }
-            Log("vJoy 驱动已检测");
-
-            int status = GetVJDStatus(VJOY_DEVICE_ID);
-            Log($"  设备 {VJOY_DEVICE_ID} 状态: {(status == 0 ? "空闲" : status == 1 ? "占用" : status == 2 ? "不存在" : status == 3 ? "本进程" : "未知" + status)}");
-
-            if (status == VJD_STAT_OWN)
-            {
-                RelinquishVJD(VJOY_DEVICE_ID);
-                Thread.Sleep(200);
-            }
-
-            if (!AcquireVJD(VJOY_DEVICE_ID))
-            {
-                Log($"获取设备 {VJOY_DEVICE_ID} 失败 (可能被其他程序占用)");
-                return false;
-            }
-
-            JState initState = new() { bDevice = (byte)VJOY_DEVICE_ID };
-            UpdateVJD(VJOY_DEVICE_ID, ref initState);
-            Log($"vJoy 设备 {VJOY_DEVICE_ID} 就绪!");
-            return true;
-        }
-        catch (Exception ex)
-        {
-            Log($"vJoy 初始化异常: {ex.Message}");
-            return false;
-        }
     }
 
     // ==================== UDP 广播发现 ====================
@@ -664,6 +531,7 @@ public partial class MainForm : Form
         double angle = 0;
         int throttle = 0, brake = 0, clutch = 0, handbrake = 0;
         int gearUp = 0, gearDown = 0;
+        int gearMode = 0, autoDr = 0, gearValue = 0;   // M=档位模式, DR=自动挡D/R, GV=手动挡位
 
         int len = msg.Length, pos = 0;
         while (pos < len)
@@ -686,6 +554,10 @@ public partial class MainForm : Form
                 case 'B': if (keyLen == 1) ParseInt(msg, eq + 1, valEnd, out brake); break;
                 case 'C': if (keyLen == 1) ParseInt(msg, eq + 1, valEnd, out clutch); break;
                 case 'H': if (keyLen == 1) ParseInt(msg, eq + 1, valEnd, out handbrake); break;
+                case 'M': if (keyLen == 1) ParseInt(msg, eq + 1, valEnd, out gearMode); break;
+                case 'D':
+                    if (keyLen == 2 && msg[pos + 1] == 'R') ParseInt(msg, eq + 1, valEnd, out autoDr);
+                    break;
                 case 'G':
                     if (keyLen == 1) { /* G=xxx 跳过 */ }
                     else if (keyLen == 2)
@@ -693,6 +565,7 @@ public partial class MainForm : Form
                         char ch2 = msg[pos + 1];
                         if (ch2 == 'u') ParseInt(msg, eq + 1, valEnd, out gearUp);
                         else if (ch2 == 'd') ParseInt(msg, eq + 1, valEnd, out gearDown);
+                        else if (ch2 == 'v') ParseInt(msg, eq + 1, valEnd, out gearValue);
                     }
                     break;
             }
@@ -705,8 +578,31 @@ public partial class MainForm : Form
         if ((now - lastDataLog).TotalSeconds >= 1.0)
         {
             lastDataLog = now;
-            string tag = vJoyReady ? "vJoy" : "收";
-            string dataLine = $"[{tag} #{msgCount}] A={angle:F1} T={throttle} B={brake} C={clutch} HB={handbrake} Gu={gearUp} Gd={gearDown}";
+            string tag = _outputMode == OutputMode.WinUHidWheel ? "方向盘" : "Xbox";
+
+            // 计算实际输出按钮位（与设备映射一致），供电脑端直观看到按钮消息
+            uint btnBits = 0;
+            if (gearUp > 0) btnBits |= 1u;           // Button1 升挡
+            if (gearDown > 0) btnBits |= 2u;         // Button2 降挡
+            if (handbrake > 0) btnBits |= 4u;        // Button3 手刹
+            if (autoDr == 1) btnBits |= 8u;          // Button4 自动D
+            else if (autoDr == -1) btnBits |= 16u;   // Button5 自动R
+            if (gearMode == 3 || gearMode == 4)      // 手动挡
+            {
+                if (gearValue == -1) btnBits |= 32u;      // Button6 挡R
+                else if (gearValue >= 1 && gearValue <= 12) btnBits |= 64u << (gearValue - 1); // Button7..18 挡1..12
+            }
+            string btnName = "";
+            if ((btnBits & 1u) != 0) btnName += " 升挡";
+            if ((btnBits & 2u) != 0) btnName += " 降挡";
+            if ((btnBits & 4u) != 0) btnName += " 手刹";
+            if ((btnBits & 8u) != 0) btnName += " D";
+            if ((btnBits & 16u) != 0) btnName += " 倒R";
+            if ((btnBits & 32u) != 0) btnName += " 挡R";
+            for (int i = 0; i < 12; i++)
+                if ((btnBits & (64u << i)) != 0) btnName += $" 挡{i + 1}";
+
+            string dataLine = $"[{tag} #{msgCount}] A={angle:F1} T={throttle} B={brake} C={clutch} HB={handbrake} M={gearMode} DR={autoDr} GV={gearValue} BTN=0x{btnBits:X8}{btnName}";
             BeginInvoke(() => lblData.Text = dataLine);
             UpdateStatusUI();
         }
@@ -714,11 +610,11 @@ public partial class MainForm : Form
         // 按输出方式分流
         if (_outputMode == OutputMode.WinUHid)
         {
-            if (xoneReady) xoneMgr.Report(angle, throttle, brake, clutch, handbrake, gearUp, gearDown);
+            if (xoneReady) xoneMgr.Report(angle, throttle, brake, clutch, handbrake, gearUp, gearDown, gearMode, autoDr, gearValue);
         }
-        else if (vJoyReady)
+        else if (_outputMode == OutputMode.WinUHidWheel)
         {
-            UpdateVJoy(angle, throttle, brake, clutch, handbrake, gearUp, gearDown);
+            if (wheelReady) wheelMgr.Report(angle, throttle, brake, clutch, handbrake, gearUp, gearDown, gearMode, autoDr, gearValue);
         }
     }
 
@@ -732,6 +628,19 @@ public partial class MainForm : Form
 
         try
         {
+            // 先销毁当前模式占用的设备
+            if (_outputMode == OutputMode.WinUHid)
+            {
+                xoneMgr.Destroy();
+                xoneReady = false;
+            }
+            else if (_outputMode == OutputMode.WinUHidWheel)
+            {
+                wheelMgr.Destroy();
+                wheelReady = false;
+            }
+
+            // 创建新模式需要的设备
             if (mode == OutputMode.WinUHid)
             {
                 if (xoneMgr.Create(out var msg))
@@ -742,19 +651,27 @@ public partial class MainForm : Form
                 else
                 {
                     Log("切换失败: " + msg);
-                    cmbOutput.SelectedIndex = (int)OutputMode.VJoy; // 回退（不再触发递归）
+                    cmbOutput.SelectedIndex = (int)OutputMode.WinUHidWheel; // 回退（不再触发递归）
                     return;
                 }
             }
             else
             {
-                xoneMgr.Destroy();
-                xoneReady = false;
-                Log("已切换回 vJoy 输出");
+                if (wheelMgr.Create(out var msg))
+                {
+                    Log(msg);
+                    wheelReady = true;
+                }
+                else
+                {
+                    Log("切换失败: " + msg);
+                    cmbOutput.SelectedIndex = (int)OutputMode.WinUHid; // 回退（不再触发递归）
+                    return;
+                }
             }
 
             _outputMode = mode;
-            UpdateStatusUI(null, $"{cmbOutput.Text} 模式");
+            UpdateStatusUI($"{cmbOutput.Text} 模式");
         }
         catch (Exception ex)
         {
@@ -796,64 +713,6 @@ public partial class MainForm : Form
             result += frac;
         }
         if (neg) result = -result;
-    }
-
-    // ==================== 更新 vJoy ====================
-    static int Smooth(int current, int target, int step)
-    {
-        if (current < target) return Math.Min(current + step, target);
-        if (current > target) return Math.Max(current - step, target);
-        return target;
-    }
-
-    void UpdateVJoy(double angle, int throttle, int brake, int clutch,
-                    int handbrake, int gearUp, int gearDown)
-    {
-        lock (vJoyLock)
-        {
-            if (Math.Abs(angle - lastAngle) < 0.3) angle = lastAngle;
-            lastAngle = angle;
-
-            double ratio = (double)VJOY_AXIS_MAX / 900.0;
-            int axisX = (int)Math.Round(16384 + angle * ratio);
-            axisX = Math.Clamp(axisX, -32768, 32767);
-
-            int targetThrottle = (int)((long)throttle * VJOY_AXIS_MAX / 100);
-            int targetBrake = (int)((long)brake * VJOY_AXIS_MAX / 100);
-            int targetClutch = (int)((long)clutch * VJOY_AXIS_MAX / 100);
-
-            if (targetThrottle > 0) targetBrake = 0;
-            if (targetBrake > 0) targetThrottle = 0;
-
-            lastThrottle = Smooth(lastThrottle, targetThrottle, SMOOTH_STEP);
-            lastBrake = Smooth(lastBrake, targetBrake, SMOOTH_STEP);
-            lastClutch = Smooth(lastClutch, targetClutch, SMOOTH_STEP);
-
-            int axisY = lastThrottle;
-            int axisZ = lastBrake;
-            int axisYRot = lastClutch;
-
-            int targetHB = handbrake > 0 ? VJOY_AXIS_MAX : 0;
-            lastAxisXRot = Smooth(lastAxisXRot, targetHB, VJOY_AXIS_MAX / 4);
-
-            int buttons = 0;
-            if (gearUp > 0) buttons |= 1;
-            if (gearDown > 0) buttons |= 2;
-            if (handbrake > 0) buttons |= 4;
-
-            JState state = new()
-            {
-                bDevice = (byte)VJOY_DEVICE_ID,
-                wAxisX = axisX,
-                wAxisY = axisY,
-                wAxisZ = axisZ,
-                wAxisXRot = lastAxisXRot,
-                wAxisYRot = axisYRot,
-                lButtons = buttons,
-            };
-
-            UpdateVJD(VJOY_DEVICE_ID, ref state);
-        }
     }
 
     // ==================== 辅助 ====================

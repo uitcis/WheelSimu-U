@@ -1,164 +1,182 @@
-# WheelSimu
+# WheelSimu — Turn Your Phone into a Steering Wheel
 
-WheelSimu is a racing simulator peripheral solution based on Android devices. By converting Android device sensor data (steering wheel angle, pedal inputs, gear shifts, etc.) into vJoy virtual joystick signals, it achieves perfect compatibility with PC racing games.
+WheelSimu lets you use your **Android phone as a steering wheel** for PC racing games:
+
+- **Android app** senses the wheel angle via gravity/gyroscope sensors and simulates throttle/brake/gear pedals on screen;
+- **PC server** receives the data and outputs it to games as a **WinUHid virtual device** (Xbox One wheel or gamepad);
+- No physical wheel needed — just mount your phone on a rig and play.
+
+```
+Phone (WheelSimu App)               PC (WheelSimuServer)                 Game
+┌────────────────┐  TCP/WiFi  ┌──────────────────────────────┐  HID   ┌────────┐
+│ Gyro angle      │ ──────────→ │ angle/throttle/brake/gears   │ ─────→ │ sees a  │
+│ Touch pedals    │            │ Output: WinUHid Wheel/Gamepad│        │ wheel/  │
+│ Shift buttons   │            │ (switchable from dropdown)   │        │ pad     │
+└────────────────┘            └──────────────────────────────┘        └────────┘
+```
+
+---
 
 ## Features
 
-- **Steering Wheel Simulation**: Supports 540°/720° steering wheel angle detection, mapped in real-time to the vJoy X-axis
-- **Three-Pedal System**: Independently simulates throttle, brake, and clutch pedals with adjustable precision
-- **Handbrake Function**: Supports handbrake switch signal input
-- **Gear Control**: Supports upshift/downshift operations
-- **Accelerometer Support**: Dual-sensor data acquisition for more precise dynamic feedback
-- **Network Connection**: Supports TCP/IP direct connection and LAN auto-discovery
-- **Auto-Reconnect**: Automatically attempts to reconnect after network disconnection to ensure continuity of gameplay
-- **vJoy Integration**: Compatible with various racing games via the vJoy virtual joystick driver
+- **Wheel simulation**: gyroscope/accelerometer detects 540°–900° steering angle, mapped in real time
+- **Three-pedal system**: independent throttle, brake and clutch pedals with touch control
+- **Gear control**: upshift / downshift buttons (mapped to paddle RB/LB or wheel buttons 1/2)
+- **Handbrake**: one-touch switch (mapped to B)
+- **Two output modes** (switchable from the top dropdown on the PC):
+  - **WinUHid (Wheel)**: virtual steering wheel (XInput Xbox One wheel layout), X-axis steering + three independent pedal channels, **recommended default**
+  - **WinUHid (Xbox One)**: virtual Xbox One gamepad, XInput, works with modern games (Forza / WRC / F1 / GTA / ETS2, etc.)
+- **Zero-deployment**: WinUHid driver is embedded in the EXE and auto-installed on first run
+- **Network**: TCP direct connection + UDP LAN auto-discovery + auto-reconnect
+- **System tray**: minimize to tray and keep running in the background
+
+---
 
 ## System Requirements
 
-### Android Side
-- Android 4.3 (API 18) and above
-- Device must support accelerometer sensors
-- Landscape mode recommended
+### Android
+- Android 4.3 (API 18) or newer
+- Accelerometer / gyroscope sensor support
+- Same LAN as the PC (WiFi or hotspot)
 
-### PC Side
-- Windows 7/8/10/11 (64-bit)
-- [vJoy](https://sourceforge.net/projects/vjoy/) virtual joystick driver installed
-- .NET 6.0 Runtime installed
+### PC (Windows)
+- Windows 10 / 11 (64-bit)
+- `WheelSimuServer.exe` is a self-contained build, no .NET runtime required
+- **Admin rights required** (UAC prompt appears automatically, since WinUHid virtual devices are admin-only)
 
-## Installation Instructions
+### Driver
+| Output mode | Driver | Notes |
+|---|---|---|
+| **WinUHid (Wheel / Xbox One)** | `WinUHidDriver.dll` (UMDF 2.23 + VHF) | **Embedded in EXE, auto-installed**. On first run it enables test-signing and installs the driver (one reboot may be needed). Success = `WinUHid Virtual HID Enumerator` appears in Device Manager |
 
-### 1. Install vJoy Driver
+> No manual driver installation needed: INF/DLL/CAT/CER are packaged inside `WheelSimuServer.exe`. Both output modes share the same driver and can be switched at runtime freely.
 
-1. Download and install the [vJoy SDK](https://sourceforge.net/projects/vjoy/)
-2. Configure the vJoy device: Ensure the following axes and buttons are enabled
-   - X Axis (Steering Wheel)
-   - Buttons 1-8 (Handbrake, Gear Shifting, etc.)
-   - Optional: Z Axis, RX Axis, etc.
+---
 
-### 2. Install PC Server
+## Installation
 
-Located at `Release/WheelSimuServer.exe`, double-click to run.
+### Step 1: Install the PC server (WinUHid driver is fully automatic)
 
-### 3. Install Android App
+`Release/WheelSimuServer.exe` (self-contained, driver embedded):
+1. Double-click and accept the UAC prompt;
+2. If the driver is not installed, the program will: enable Windows test-signing mode (`bcdedit /set testsigning on`), ask you to **reboot once**, then auto-import the certificate and install the driver;
+3. After that, just double-click and play.
 
-Install `Release/WheelSimu.apk` onto the Android device.
+> The single manual step is the one-time reboot required to activate test-signing.
+
+### Step 2: Install the Android app
+
+Install `Release/WheelSimu.apk` on your phone (allow "install from unknown sources").
+
+---
 
 ## Usage
 
-### Start Server
+### 1. Start the PC server
+1. Double-click `WheelSimuServer.exe` (must run as administrator);
+2. The server auto-installs/checks the WinUHid driver and listens on **TCP 5050** (data) with UDP **5051** broadcast (discovery);
+3. Bottom status bar shows: `IP: 192.168.x.x:5050`, `客户端/Client: 0`, `消息/Messages: 0`.
 
-1. Run `WheelSimuServer.exe`
-2. The server will automatically broadcast its IP address
-3. Confirm the vJoy status is "OWN" (Control Acquired)
+### 2. Connect the phone
+- **Auto-discovery**: keep the phone on the same LAN, open the app, and it will auto-fill the server IP found via broadcast, then tap Connect.
+- **Manual**: enter `192.168.x.x:5050` in the app and tap Connect.
 
-### Connect Android App
+### 3. Choose the output mode
+Use the dropdown at the top-right of the server window:
 
-**Method One: Auto-Discovery**
-1. Ensure the phone and PC are on the same LAN
-2. Click the "Network Mode" button on the Android side
-3. Select the discovered server from the list
+| Option | Meaning | Use case |
+|---|---|---|
+| `WinUHid (Wheel)` | Virtual steering wheel (XInput) | **Default**, three pedals + full gear buttons |
+| `WinUHid (Xbox One)` | Virtual Xbox One gamepad (XInput) | Games that only recognize a standard gamepad |
 
-**Method Two: Manual Connection**
-1. Enter the PC's IP address on the Android side
-2. Click the "Connect" button
+### 4. Play
+1. Mount the phone on a rig, open the app and connect;
+2. In game settings you should see an **Xbox One wheel** or **Xbox One gamepad**;
+3. Rotate the phone — the in-game wheel follows.
 
-### Operation Guide
+---
 
-| Function | Operation Method |
-|------|----------|
-| Steering | Tilt device or rotate physical steering wheel (if available) |
-| Throttle/Brake/Clutch | Hold corresponding pedal area and slide to adjust |
-| Handbrake | Toggle handbrake switch |
-| Upshift/Downshift | Click upshift/downshift buttons |
-| Reset Center | Click "Reset Angle" button |
-| Enable Steering | Enable "Steering Enable" switch |
+## Control Mapping
 
-## Project Structure
+| Game action | Phone action | WinUHid (Wheel) | WinUHid (Xbox One) |
+|---|---|---|---|
+| Steering | tilt/rotate phone | Wheel X-axis (1:1 angle) | Left stick X |
+| Throttle | hold throttle pedal | Throttle channel | Right trigger (RT) |
+| Brake | hold brake pedal | Brake channel | Left trigger (LT) |
+| Clutch | hold clutch pedal (manual) | Clutch channel | Right stick Y |
+| Upshift | tap upshift button | Button 1 | RB (right paddle) |
+| Downshift | tap downshift button | Button 2 | LB (left paddle) |
+| Handbrake | handbrake switch | Button 3 | B |
+| Auto D | gear switch D | Button 4 (throttle held full) | Y (throttle held full) |
+| Auto R | gear switch R | Button 5 (throttle held full) | X (throttle held full) |
+| Manual R | manual reverse | Button 6 | Back |
+| Manual 1–6 | manual gears 1–6 | Buttons 7–12 | A/X/Y/LB/RB/Menu |
 
-```
-WheelSimu/
-├── WheelSimu/                    # Android Application Project
-│   ├── MainActivity.cs           # Main interface and core logic
-│   ├── SteeringWheelView.cs      # Custom steering wheel view
-│   ├── PedalGaugeView.cs         # Custom pedal gauge view
-│   ├── CommonCode.cs             # Common code
-│   └── Resources/                # Resource files (layouts, icons, styles, etc.)
-│
-├── WheelSimuServer/              # PC Server Project
-│   ├── MainForm.cs               # Main form and business logic
-│   ├── VJoyDiag.cs               # vJoy diagnostic tool
-│   └── Program.cs                # Program entry point
-│
-└── Release/                      # Release Files
-    ├── WheelSimu.apk             # Android installer package
-    └── WheelSimuServer.exe       # Windows server
-```
+---
 
-## Technical Architecture
+## Communication Protocol
 
-### Communication Protocol
-
-The server listens on port 8866 using the TCP protocol. Data format is a single-line JSON string:
+Server listens on **TCP 5050**; data is single-line JSON ending with `\n`:
 
 ```json
-{
-  "type": "control",
-  "angle": 45.5,
-  "throttle": 75,
-  "brake": 0,
-  "clutch": 0,
-  "handbrake": 0,
-  "gearUp": 0,
-  "gearDown": 0
-}
+{"type":"control","angle":45.5,"throttle":75,"brake":0,"clutch":0,"handbrake":0,"gearUp":0,"gearDown":0}
 ```
 
-Discovery protocol uses UDP broadcast on port 12001, magic number is `"WheelSimu"`.
+| Field | Meaning | Range |
+|---|---|---|
+| `angle` | steering angle (deg) | approx. -450 ~ +450 |
+| `throttle` | throttle | 0–100 |
+| `brake` | brake | 0–100 |
+| `clutch` | clutch | 0–100 |
+| `handbrake` | handbrake | 0 / 1 |
+| `gearUp` / `gearDown` | shift pulses | 0 / 1 |
 
-### Core Class Description
+LAN discovery: the server broadcasts `WHEELSIMU_SERVER:<ip>:<port>` over UDP **5051** every second.
 
-- **MainActivity**: Sensor management, network communication, data sending
-- **SteeringWheelView**: Steering wheel UI rendering, supports smooth angle transitions
-- **PedalGaugeView**: Pedal gauge UI, supports touch interaction
-- **MainForm (Server)**: vJoy control, TCP server, client management
+---
 
-## Build Instructions
+## Build
 
-### Android Project
-
-```bash
-# Xamarin.Android development environment required
-# Open WheelSimu.sln using Visual Studio
-# Select Release configuration, build to generate APK
-```
-
-### Server Project
+### PC Server
 
 ```bash
-# .NET 6.0 SDK required
 cd WheelSimuServer
-dotnet build -c Release
+dotnet publish -c Release
 ```
+
+### Android
+
+Open `WheelSimu.sln` in Visual Studio and build with the Release configuration.
+
+---
 
 ## FAQ
 
-**Q: vJoy status displays MISS**
-A: Check if the vJoy driver is installed correctly, try re-configuring the vJoy device
+**Q1: UAC prompt on startup?**
+A: Normal — WinUHid virtual devices are admin-only. Click "Yes".
 
-**Q: Android side cannot discover server**
-A: Confirm firewall allows UDP 12001 port communication, check if on the same network
+**Q2: "Driver unavailable / switch failed"?**
+A: Driver not installed or test-signing off. Normally auto-installed on first run; if not, check admin rights, reboot once, or reinstall per Step 1.
 
-**Q: Steering wheel response is sluggish**
-A: Try lowering the sensor data sending interval on the Android side
+**Q3: Game doesn't see the device / no response?**
+A: Check the server log for "WinUHid ... created", rescan devices in game settings, and check `BTN=0x…` in the status line for button output.
 
-**Q: Pedal values jitter**
-A: Enable the smoothing filter function in PedalGaugeView
+**Q4: Phone can't connect?**
+A: Same LAN? Allow TCP 5050 and UDP 5051 through Windows Firewall (accept the first-run prompt), or enter the IP manually.
+
+**Q5: Steering direction reversed?**
+A: Mount the phone the other way, or invert the sensor direction in the app.
+
+**Q6: Phone rotates 90° but game only 45°?**
+A: Fixed in the new version (equivalent ratio `angle/450`, wheel mode maps 1:1). Update `Release/WheelSimuServer.exe`.
+
+---
 
 ## License
 
-This project is open source under the MIT License.
+MIT License.
 
 ## Acknowledgements
 
-- [vJoy](https://sourceforge.net/projects/vjoy/) - Virtual Joystick Driver
-- [Xamarin.Android](https://dotnet.microsoft.com/en-us/apps/xamarin/android) - Android Application Development Framework
+- [WinUHid (lurebat)](https://github.com/lurebat/WinUHid) — virtual HID framework + Xbox One preset driver
+- [Xamarin.Android](https://dotnet.microsoft.com/en-us/apps/xamarin/android) — Android app framework

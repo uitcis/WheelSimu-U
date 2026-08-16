@@ -96,9 +96,9 @@
         <!-- 布局切换按钮 -->
         <Button
             android:id="@+id/btnLayoutSwitch"
-            android:layout_width="34dp"
+            android:layout_width="46dp"
             android:layout_height="26dp"
-            android:text="L1"
+            android:text="布局0"
             android:textColor="#FFFFB74D"
             android:textSize="9sp"
             android:textStyle="bold"
@@ -129,7 +129,7 @@
         android:orientation="horizontal"
         android:weightSum="10">
 
-        <!-- ===== 左栏 — 刹车 + 档位 (weight=2.2) ===== -->
+        <!-- ===== 左栏 — 档位 + 刹车 (weight=2.2)，刹车与右栏油门同高 ===== -->
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="match_parent"
@@ -138,37 +138,212 @@
             android:gravity="center_horizontal"
             android:paddingHorizontal="2dp">
 
-            <!-- 档位按钮（赛车方块样式） -->
+            <!-- 档位区域（上半，与右栏离合同高，占档位按钮更大空间） -->
             <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center"
-                android:layout_marginBottom="4dp">
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center_horizontal">
+
+                <!-- 档位模式切换按钮 -->
                 <Button
-                    android:id="@+id/btnGearDown"
-                    android:layout_width="0dp"
-                    android:layout_weight="1"
-                    android:layout_height="42dp"
-                    android:text="▼ 降"
-                    android:textColor="#FFFF5252"
-                    android:textSize="14sp"
+                    android:id="@+id/btnGearMode"
+                    android:layout_width="match_parent"
+                    android:layout_height="30dp"
+                    android:text="档位: 简易档"
+                    android:textColor="#FF4FC3F7"
+                    android:textSize="12sp"
                     android:textStyle="bold"
-                    android:background="@drawable/btn_dark" />
-                <Button
-                    android:id="@+id/btnGearUp"
-                    android:layout_width="0dp"
+                    android:background="@drawable/btn_dark"
+                    android:layout_marginBottom="4dp" />
+
+                <!-- 档位面板：根据档位模式切换显示，占满档位区域剩余空间 -->
+                <FrameLayout
+                    android:id="@+id/gearControlsContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
                     android:layout_weight="1"
-                    android:layout_height="42dp"
-                    android:text="▲ 升"
-                    android:textColor="#FF69F0AE"
-                    android:textSize="14sp"
-                    android:textStyle="bold"
-                    android:layout_marginStart="4dp"
-                    android:background="@drawable/btn_dark" />
+                    android:layout_marginBottom="4dp">
+
+                <!-- 简易档面板：仅油门/刹车，无任何挡位控制 -->
+                <LinearLayout
+                    android:id="@+id/simpleGearPanel"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="horizontal"
+                    android:gravity="center">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="仅油门/刹车 · 无挡位控制"
+                        android:textColor="#FF78909C"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <!-- 真实自动挡面板：拨动开关，上=D 前进 / 下=R 倒车，点按切换保持，换挡由游戏自动完成 -->
+                <LinearLayout
+                    android:id="@+id/autoGearPanel"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical">
+                    <Button
+                        android:id="@+id/btnAutoD"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="0.5"
+                        android:text="D 前进"
+                        android:textColor="#FF69F0AE"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:background="@drawable/btn_dark" />
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="#FF4B535C" />
+                    <Button
+                        android:id="@+id/btnAutoR"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="0.5"
+                        android:text="R 倒车"
+                        android:textColor="#FFFF5252"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:background="@drawable/btn_dark" />
+                </LinearLayout>
+
+                <!-- 序列挡面板：升挡/降挡 -->
+                <LinearLayout
+                    android:id="@+id/seqGearPanel"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="horizontal"
+                    android:gravity="center"
+                    android:weightSum="2">
+                    <Button
+                        android:id="@+id/btnGearDown"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="match_parent"
+                        android:text="▼ 降挡"
+                        android:textColor="#FFFF5252"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:background="@drawable/btn_dark" />
+                    <Button
+                        android:id="@+id/btnGearUp"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="match_parent"
+                        android:text="▲ 升挡"
+                        android:textColor="#FF69F0AE"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:background="@drawable/btn_dark"
+                        android:layout_marginStart="4dp" />
+                </LinearLayout>
+
+                <!-- 5档手动挡面板：H 型 1 3 5 / N / 2 4 R -->
+                <LinearLayout
+                    android:id="@+id/manualGear5Panel"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <!-- 第1行：1 3 5 -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:orientation="horizontal">
+                        <Button android:id="@+id/btnGear1" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:text="1" android:textColor="#FFE0E0E0" android:textSize="13sp" android:textStyle="bold" android:background="@drawable/btn_dark" />
+                        <Button android:id="@+id/btnGear3" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:text="3" android:textColor="#FFE0E0E0" android:textSize="13sp" android:textStyle="bold" android:background="@drawable/btn_dark" android:layout_marginStart="2dp" />
+                        <Button android:id="@+id/btnGear5" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:text="5" android:textColor="#FFE0E0E0" android:textSize="13sp" android:textStyle="bold" android:background="@drawable/btn_dark" android:layout_marginStart="2dp" />
+                    </LinearLayout>
+
+                    <!-- 第2行：空挡 N -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:orientation="horizontal"
+                        android:gravity="center"
+                        android:layout_marginTop="2dp">
+                        <View android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+                        <Button android:id="@+id/btnGearN" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:text="N" android:textColor="#FF80DEEA" android:textSize="13sp" android:textStyle="bold" android:background="@drawable/btn_dark" />
+                        <View android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+                    </LinearLayout>
+
+                    <!-- 第3行：2 4 R -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="2dp">
+                        <Button android:id="@+id/btnGear2" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:text="2" android:textColor="#FFE0E0E0" android:textSize="13sp" android:textStyle="bold" android:background="@drawable/btn_dark" />
+                        <Button android:id="@+id/btnGear4" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:text="4" android:textColor="#FFE0E0E0" android:textSize="13sp" android:textStyle="bold" android:background="@drawable/btn_dark" android:layout_marginStart="2dp" />
+                        <Button android:id="@+id/btnGearR" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:text="R" android:textColor="#FFFF5252" android:textSize="13sp" android:textStyle="bold" android:background="@drawable/btn_dark" android:layout_marginStart="2dp" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- 6档手动挡面板：H 型 R 1 3 5 / _ N _ / _ 2 4 6（2/4/6 分别与 1/3/5 对齐） -->
+                <LinearLayout
+                    android:id="@+id/manualGear6Panel"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <!-- 第1行：R 1 3 5 -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:orientation="horizontal">
+                        <Button android:id="@+id/btn6GearR" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:text="R" android:textColor="#FFFF5252" android:textSize="13sp" android:textStyle="bold" android:background="@drawable/btn_dark" />
+                        <Button android:id="@+id/btn6Gear1" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:text="1" android:textColor="#FFE0E0E0" android:textSize="13sp" android:textStyle="bold" android:background="@drawable/btn_dark" android:layout_marginStart="2dp" />
+                        <Button android:id="@+id/btn6Gear3" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:text="3" android:textColor="#FFE0E0E0" android:textSize="13sp" android:textStyle="bold" android:background="@drawable/btn_dark" android:layout_marginStart="2dp" />
+                        <Button android:id="@+id/btn6Gear5" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:text="5" android:textColor="#FFE0E0E0" android:textSize="13sp" android:textStyle="bold" android:background="@drawable/btn_dark" android:layout_marginStart="2dp" />
+                    </LinearLayout>
+
+                    <!-- 第2行：空挡 N（与 1/2 同列） -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="2dp">
+                        <View android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+                        <Button android:id="@+id/btn6GearN" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:text="N" android:textColor="#FF80DEEA" android:textSize="13sp" android:textStyle="bold" android:background="@drawable/btn_dark" />
+                        <View android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+                        <View android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+                    </LinearLayout>
+
+                    <!-- 第3行：2 4 6（2 与 1 对齐） -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="2dp">
+                        <View android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+                        <Button android:id="@+id/btn6Gear2" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:text="2" android:textColor="#FFE0E0E0" android:textSize="13sp" android:textStyle="bold" android:background="@drawable/btn_dark" />
+                        <Button android:id="@+id/btn6Gear4" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:text="4" android:textColor="#FFE0E0E0" android:textSize="13sp" android:textStyle="bold" android:background="@drawable/btn_dark" android:layout_marginStart="2dp" />
+                        <Button android:id="@+id/btn6Gear6" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:text="6" android:textColor="#FFE0E0E0" android:textSize="13sp" android:textStyle="bold" android:background="@drawable/btn_dark" android:layout_marginStart="2dp" />
+                    </LinearLayout>
+                </LinearLayout>
+                </FrameLayout>
             </LinearLayout>
 
-            <!-- 刹车 (填满剩余空间) -->
+            <!-- 占位 View：对应右栏手刹按钮高度，保证刹车与油门严格同高 -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="42dp" />
+
+            <!-- 刹车（下半，与右栏油门同高） -->
             <FrameLayout
                 android:id="@+id/gaugeBrake"
                 android:layout_width="match_parent"

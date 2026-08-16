@@ -48,6 +48,15 @@ namespace WheelSimu
         Button btnClearAngle;
         Button btnNetMode;
         Button btnLayoutSwitch;  // 布局切换按钮
+        Button btnGearMode;      // 档位模式切换按钮
+        Button btnAutoD;         // 真实自动挡 D(前进) 拨动开关
+        Button btnAutoR;         // 真实自动挡 R(倒车) 拨动开关
+        Button btnGearR;         // 5档手动挡 R
+        Button btnGearN;         // 5档手动挡 N(空挡)
+        Button[] btnManualGears; // 5档手动挡 1..5
+        Button btn6GearR;        // 6档手动挡 R
+        Button btn6GearN;        // 6档手动挡 N(空挡)
+        Button[] btn6ManualGears; // 6档手动挡 1..6
         Switch SteerEnableSwitch;
         ToggleButton HandbrakeSwitch;
         SteeringWheelView steeringWheel;
@@ -57,6 +66,17 @@ namespace WheelSimu
 
         /// <summary>布局模式: 0=赛车HUD, 1=模拟方向盘</summary>
         private int _layoutMode = 0;
+
+        /// <summary>档位模式: 0=简易档(仅油门刹车), 1=真实自动挡(D/R拨动开关), 2=序列挡, 3=5档手动挡, 4=6档手动挡</summary>
+        private int _gearMode = 0;
+
+        /// <summary>真实自动挡拨动开关: 0=N(空挡), 1=D(前进), -1=R(倒车)</summary>
+        private int _autoDrSelected = 0;
+
+        /// <summary>手动挡当前挂挡: -1=R, 0=N, 1..6</summary>
+        private int _manualGearSelected = 0;
+
+        static readonly string[] kGearModeNames = { "简易档", "真实自动挡", "序列挡", "5档手动挡", "6档手动挡" };
 
         // 踏板垂直进度条
         PedalGaugeView gaugeThrottle;
@@ -103,6 +123,7 @@ namespace WheelSimu
         private readonly byte[] _sendBuf = new byte[256];  // 预分配发送缓冲区，避免 GC
         private volatile int _latestThrottle, _latestBrake, _latestClutch, _latestHb;
         private volatile int _latestGearUp, _latestGearDn, _latestGear, _latestSet, _latestSetSR;
+        private volatile int _latestGearMode, _latestDr, _latestGearValue;
         private volatile float _latestAngle;
 
         // UDP 服务自动发现
@@ -113,6 +134,7 @@ namespace WheelSimu
 
         // 自动重连
         private volatile bool mAutoReconnect = true;
+        private volatile bool mConnecting;   // 连接防重入（连接在后台线程执行，不阻塞 UI）
 
         //vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv全局参数声明vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
 
@@ -146,6 +168,8 @@ namespace WheelSimu
                 // 读取布局偏好：0=赛车HUD(content_main), 1=模拟方向盘(content_wheel)
                 var prefs = GetSharedPreferences("WheelSimuPrefs", FileCreationMode.Private);
                 _layoutMode = prefs.GetInt("LayoutMode", 0);
+                _gearMode = prefs.GetInt("GearMode", 0);
+                if (_gearMode < 0 || _gearMode > 4) _gearMode = 0;
                 SetContentView(_layoutMode == 0 ? Resource.Layout.activity_main : Resource.Layout.activity_wheel);
 
 
@@ -181,6 +205,7 @@ namespace WheelSimu
             btnClearAngle = FindViewById<Button>(Resource.Id.btnClearAngle);
             SteerEnableSwitch = FindViewById<Switch>(Resource.Id.SteerEnableSwitch);
             HandbrakeSwitch = FindViewById<ToggleButton>(Resource.Id.HandbrakeSwitch);
+            InitGearControls();
 
             // 程序化创建方向盘视图
             var container = FindViewById<FrameLayout>(Resource.Id.steeringWheelContainer);
@@ -259,6 +284,17 @@ namespace WheelSimu
                 p.Edit().PutString("LastIP", IPText.Text).Commit();
                 Recreate();
             };
+
+            if (btnGearMode != null)
+            {
+                btnGearMode.Click += delegate
+                {
+                    _gearMode = (_gearMode + 1) % 5;
+                    GetSharedPreferences("WheelSimuPrefs", FileCreationMode.Private)
+                        .Edit().PutInt("GearMode", _gearMode).Commit();
+                    ApplyGearMode();
+                };
+            }
 
             btnClearAngle.Click += delegate
             {
@@ -484,6 +520,31 @@ namespace WheelSimu
                     _latestGear     = btnGearUp.Pressed ? 1 : (btnGearDown.Pressed ? -1 : 0);
                     _latestSet      = btnSet.Pressed ? -1 : (btnReset.Pressed ? 1 : 0);
                     _latestSetSR    = btnSetSrd.Pressed ? -1 : (btnSetSru.Pressed ? 1 : 0);
+                    // 档位模式相关状态
+                    _latestGearMode = _gearMode;
+                    if (_gearMode == 0)
+                    {
+                        // 简易档：仅油门/刹车，无任何挡位控制（游戏自己自动换挡）
+                        _latestDr = 0;
+                        _latestGearValue = 0;
+                    }
+                    else if (_gearMode == 1)
+                    {
+                        // 真实自动挡：拨动开关选 D 前进 / R 倒车（点按切换保持），换挡由游戏自动完成
+                        _latestDr = _autoDrSelected;
+                        _latestGearValue = 0;
+                    }
+                    else if (_gearMode == 3 || _gearMode == 4)
+                    {
+                        // 手动挡（5档/6档）：点按挂挡（保持），_manualGearSelected 为当前挡位
+                        _latestDr = 0;
+                        _latestGearValue = _manualGearSelected;
+                    }
+                    else
+                    {
+                        _latestDr = 0;
+                        _latestGearValue = 0;
+                    }
                     _latestAngle    = (float)angle;
 
                     // 方向盘角度每帧更新（动画平滑）
@@ -502,7 +563,8 @@ namespace WheelSimu
                     if (IsConnected)
                     {
                         int len = BuildSendDataToBuffer(angle, _latestThrottle, _latestBrake, _latestClutch,
-                            _latestGearUp, _latestGearDn, _latestGear, _latestSet, _latestSetSR, _latestHb);
+                            _latestGearUp, _latestGearDn, _latestGear, _latestSet, _latestSetSR, _latestHb,
+                            _latestGearMode, _latestDr, _latestGearValue);
                         try { Sct[1]?.Send(_sendBuf, len, SocketFlags.None); }
                         catch { IsConnected = false; OnConnectionLost(); }
                     }
@@ -515,9 +577,10 @@ namespace WheelSimu
         }
 
         /// <summary>在 _sendBuf 中构建发送数据，返回有效字节数</summary>
-        private int BuildSendDataToBuffer(double angle, int t, int b, int c, int gu, int gd, int g, int s, int sr, int h)
+        private int BuildSendDataToBuffer(double angle, int t, int b, int c, int gu, int gd, int g, int s, int sr, int h,
+                                          int m, int dr, int gv)
         {
-            string data = $"A={angle:0.0},T={t},B={b},C={c},Gu={gu},Gd={gd},G={g},S={s},SR={sr},H={h}@";
+            string data = $"A={angle:0.0},T={t},B={b},C={c},Gu={gu},Gd={gd},G={g},S={s},SR={sr},H={h},M={m},DR={dr},GV={gv}@";
             return Encoding.UTF8.GetBytes(data, 0, data.Length, _sendBuf, 0);
         }
 
@@ -618,7 +681,8 @@ namespace WheelSimu
             btnNetMode.Text = modes[mConnectMode];
         }
 
-        /// <summary>发起连接（不切换自动重连开关），失败时按自动重连策略处理</summary>
+        /// <summary>发起连接（不切换自动重连开关），失败时按自动重连策略处理。
+        /// 连接在后台线程执行，避免阻塞 UI 线程（否则自动重连期间滑块/触摸会卡死）</summary>
         private void ConnectNow(string ipOverride = null)
         {
             string ip = ipOverride ?? IPText.Text?.Trim();
@@ -629,22 +693,33 @@ namespace WheelSimu
                 return;
             }
 
+            if (mConnecting) return;    // 防重入（正在连接/重连中）
+            mConnecting = true;
             RunOnUiThread(() => btnConnect.Enabled = false);
-            try
-            {
-                DoConnect(ip);
-            }
-            catch (Exception ex)
-            {
-                RunOnUiThread(() => textView2.Text = ex.Message);
-                RunOnUiThread(() => textView3.Text =
-                $"Remote={IPData[0].IP}:{IPData[0].Port}  Local={IPData[1].IP}:{IPData[1].Port}");
-                RunOnUiThread(() => btnConnect.Enabled = true);
-                TryTimes += 1;
 
-                if (mAutoReconnect)
-                    ScheduleReconnect();
-            }
+            // 后台线程执行 DoConnect（内部有 connectTask.Wait(5000) 等阻塞调用），不阻塞 UI
+            Task.Run(() =>
+            {
+                try
+                {
+                    DoConnect(ip);
+                }
+                catch (Exception ex)
+                {
+                    RunOnUiThread(() => textView2.Text = ex.Message);
+                    RunOnUiThread(() => textView3.Text =
+                    $"Remote={IPData[0].IP}:{IPData[0].Port}  Local={IPData[1].IP}:{IPData[1].Port}");
+                    RunOnUiThread(() => btnConnect.Enabled = true);
+                    TryTimes += 1;
+
+                    if (mAutoReconnect)
+                        ScheduleReconnect();
+                }
+                finally
+                {
+                    mConnecting = false;
+                }
+            });
         }
 
         private void BtnConnect_OnClick()
@@ -753,6 +828,128 @@ namespace WheelSimu
             CancelReconnect();
             RunOnUiThread(() => btnConnect.Text = "重连: 开");
             RunOnUiThread(() => btnConnect.Enabled = true);
+        }
+
+        /// <summary>初始化档位模式相关控件（两种布局都有，部分控件可能不存在时置空安全处理）</summary>
+        private void InitGearControls()
+        {
+            btnGearMode = FindViewById<Button>(Resource.Id.btnGearMode);
+            btnAutoD = FindViewById<Button>(Resource.Id.btnAutoD);
+            btnAutoR = FindViewById<Button>(Resource.Id.btnAutoR);
+            btnGearR = FindViewById<Button>(Resource.Id.btnGearR);
+            btnGearN = FindViewById<Button>(Resource.Id.btnGearN);
+            btnManualGears = new Button[6];
+            int[] gearIds =
+            {
+                Resource.Id.btnGear1, Resource.Id.btnGear2, Resource.Id.btnGear3, Resource.Id.btnGear4,
+                Resource.Id.btnGear5
+            };
+            for (int i = 0; i < gearIds.Length; i++) btnManualGears[i] = FindViewById<Button>(gearIds[i]);
+            // btnManualGears[5] 保持 null（5 档面板无 6 号按钮，判空保护）
+
+            // 6档手动挡面板：H 型 R 1 3 5 / _ N _ / _ 2 4 6
+            btn6GearR = FindViewById<Button>(Resource.Id.btn6GearR);
+            btn6GearN = FindViewById<Button>(Resource.Id.btn6GearN);
+            btn6ManualGears = new Button[6];
+            int[] gear6Ids =
+            {
+                Resource.Id.btn6Gear1, Resource.Id.btn6Gear2, Resource.Id.btn6Gear3, Resource.Id.btn6Gear4,
+                Resource.Id.btn6Gear5, Resource.Id.btn6Gear6
+            };
+            for (int i = 0; i < 6; i++) btn6ManualGears[i] = FindViewById<Button>(gear6Ids[i]);
+
+            // 真实自动挡拨动开关：点按切换并保持（再点同挡回空挡）
+            if (btnAutoD != null) btnAutoD.Click += (s, e) => ToggleAutoDr(1);
+            if (btnAutoR != null) btnAutoR.Click += (s, e) => ToggleAutoDr(-1);
+
+            // 手动挡：点按挂挡（再点同挡或点 N 回空挡）
+            if (btnGearR != null) btnGearR.Click += (s, e) => SelectManualGear(-1);
+            if (btnGearN != null) btnGearN.Click += (s, e) => SelectManualGear(0);
+            for (int i = 0; i < 6; i++)
+            {
+                int gear = i + 1;
+                if (btnManualGears[i] != null) btnManualGears[i].Click += (s, e) => SelectManualGear(gear);
+            }
+            if (btn6GearR != null) btn6GearR.Click += (s, e) => SelectManualGear(-1);
+            if (btn6GearN != null) btn6GearN.Click += (s, e) => SelectManualGear(0);
+            for (int i = 0; i < 6; i++)
+            {
+                int gear = i + 1;
+                if (btn6ManualGears[i] != null) btn6ManualGears[i].Click += (s, e) => SelectManualGear(gear);
+            }
+
+            ApplyGearMode();
+        }
+
+        /// <summary>根据当前档位模式显示对应的档位面板并更新按钮文字</summary>
+        private void ApplyGearMode()
+        {
+            if (btnGearMode != null)
+                btnGearMode.Text = kGearModeNames[_gearMode];
+
+            var simplePanel = FindViewById<Android.Views.View>(Resource.Id.simpleGearPanel);
+            var autoPanel = FindViewById<Android.Views.View>(Resource.Id.autoGearPanel);
+            var seqPanel = FindViewById<Android.Views.View>(Resource.Id.seqGearPanel);
+            var gear5Panel = FindViewById<Android.Views.View>(Resource.Id.manualGear5Panel);
+            var gear6Panel = FindViewById<Android.Views.View>(Resource.Id.manualGear6Panel);
+            if (simplePanel == null || autoPanel == null || seqPanel == null) return;
+
+            simplePanel.Visibility = _gearMode == 0 ? ViewStates.Visible : ViewStates.Gone;
+            autoPanel.Visibility = _gearMode == 1 ? ViewStates.Visible : ViewStates.Gone;
+            seqPanel.Visibility = _gearMode == 2 ? ViewStates.Visible : ViewStates.Gone;
+            if (gear5Panel != null) gear5Panel.Visibility = _gearMode == 3 ? ViewStates.Visible : ViewStates.Gone;
+            if (gear6Panel != null) gear6Panel.Visibility = _gearMode == 4 ? ViewStates.Visible : ViewStates.Gone;
+
+            if (_gearMode == 1) UpdateAutoDrHighlight();
+            if (_gearMode == 3 || _gearMode == 4) UpdateManualGearHighlight();
+        }
+
+        /// <summary>真实自动挡拨动开关：点按切换并保持（再次点选同挡位则回到空挡）</summary>
+        private void ToggleAutoDr(int dr)
+        {
+            _autoDrSelected = (_autoDrSelected == dr) ? 0 : dr;
+            UpdateAutoDrHighlight();
+        }
+
+        /// <summary>高亮真实自动挡拨动开关选中的挡位（D 或 R），未选中时暗色</summary>
+        private void UpdateAutoDrHighlight()
+        {
+            void SetSelected(Button btn, bool sel)
+            {
+                if (btn == null) return;
+                btn.SetBackgroundResource(sel ? Resource.Drawable.btn_accent : Resource.Drawable.btn_dark);
+            }
+
+            SetSelected(btnAutoD, _autoDrSelected == 1);
+            SetSelected(btnAutoR, _autoDrSelected == -1);
+        }
+
+        /// <summary>选择手动挡挡位（-1=R, 0=N, 1..6），再次点选同挡位则回到空挡</summary>
+        private void SelectManualGear(int gear)
+        {
+            _manualGearSelected = (_manualGearSelected == gear) ? 0 : gear;
+            UpdateManualGearHighlight();
+        }
+
+        /// <summary>高亮当前手动挡挂挡，其余恢复暗色</summary>
+        private void UpdateManualGearHighlight()
+        {
+            void SetSelected(Button btn, bool sel)
+            {
+                if (btn == null) return;
+                btn.SetBackgroundResource(sel ? Resource.Drawable.btn_accent : Resource.Drawable.btn_dark);
+            }
+
+            // 5档面板高亮
+            SetSelected(btnGearR, _manualGearSelected == -1);
+            for (int i = 0; i < 6; i++)
+                SetSelected(btnManualGears[i], _manualGearSelected == i + 1);
+            SetSelected(btnGearN, _manualGearSelected == 0);
+            // 6档面板高亮
+            SetSelected(btn6GearR, _manualGearSelected == -1);
+            for (int i = 0; i < 6; i++)
+                SetSelected(btn6ManualGears[i], _manualGearSelected == i + 1);
+            SetSelected(btn6GearN, _manualGearSelected == 0);
         }
 
         private void BtnClearAngle_OnClick()
@@ -944,14 +1141,11 @@ namespace WheelSimu
                 // 给UI线程一点时间更新状态
                 Thread.Sleep(100);
 
-                // 在UI线程上执行重连
-                RunOnUiThread(() =>
+                // 在后台线程执行重连（ConnectNow 内部自行启动后台任务，不再阻塞 UI）
+                if (!IsConnected && mAutoReconnect)
                 {
-                    if (!IsConnected && mAutoReconnect)
-                    {
-                        try { ConnectNow(); } catch { }
-                    }
-                });
+                    try { ConnectNow(); } catch { }
+                }
             }, null, 3000, Timeout.Infinite);
         }
 

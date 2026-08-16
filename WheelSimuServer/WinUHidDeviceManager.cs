@@ -49,11 +49,14 @@ public sealed class WinUHidDeviceManager : IDisposable
     const int TRIGGER_MAX = 1023;               // 10bit
     const double ANGLE_RATIO = 32767.0 / 900.0; // ±450° → 摇杆满行程
     const int SMOOTH_STEP = TRIGGER_MAX / 30;
+    const int CLUTCH_SMOOTH_STEP = 1000;        // 离合轴（右摇杆 Y）平滑步长
+    const int GEAR_HOLD_TICKS = 6;              // 升/降档脉冲保持 6 帧（约 60ms），确保游戏捕捉到点击
 
     IntPtr _handle;
     readonly object _lock = new();
 
-    int _lastThrottle, _lastBrake;
+    int _lastThrottle, _lastBrake, _lastClutch;
+    int _gearUpTimer, _gearDownTimer;
 
     public bool IsReady => _handle != IntPtr.Zero;
     public string LastError { get; private set; } = "";
@@ -100,6 +103,9 @@ public sealed class WinUHidDeviceManager : IDisposable
 
             _lastThrottle = 0;
             _lastBrake = 0;
+            _lastClutch = STICK_CENTER;
+            _gearUpTimer = 0;
+            _gearDownTimer = 0;
             LastError = "";
             message = "WinUHid Xbox One 虚拟手柄已创建";
             return true;
@@ -107,12 +113,16 @@ public sealed class WinUHidDeviceManager : IDisposable
     }
 
     /// <summary>
-    /// 提交输入报告。映射（与 vJoy 模式保持一致）：
-    ///   角度 → 左摇杆 X；油门 → 左扳机；刹车 → 右扳机；
-    ///   升档 → A；降档 → B；手刹 → LB。
+    /// 提交输入报告。映射（方向盘标准布局，三踏板独立通道）：
+    ///   角度 → 左摇杆 X；油门 → 右扳机；刹车 → 左扳机；离合 → 右摇杆 Y（向下踩）；
+    ///   升档 → RB（右拨片）；降档 → LB（左拨片）；手刹 → B；
+    ///   自动挡：D→Y（满油门）、R→X（满油门）；
+    ///   手动挡：R→Back、1→A、2→X、3→Y、4→LB、5→RB、6→Menu。
+    ///   升/降档为瞬时脉冲，自动锁存约 60ms，避免游戏 60Hz 轮询漏检。
     /// </summary>
     public void Report(double angle, int throttle, int brake, int clutch,
-                       int handbrake, int gearUp, int gearDown)
+                       int handbrake, int gearUp, int gearDown,
+                       int gearMode, int autoDr, int gearValue)
     {
         lock (_lock)
         {
@@ -122,22 +132,33 @@ public sealed class WinUHidDeviceManager : IDisposable
             int stickX = (int)Math.Round(STICK_CENTER + angle * ANGLE_RATIO);
             stickX = Math.Clamp(stickX, 0, 0xFFFF);
 
-            // 扳机 10bit
+            // 三个踏板独立通道（互不干扰，允许油离/跟趾配合）
+            // 油门 → 右扳机，刹车 → 左扳机
             int targetThrottle = throttle * TRIGGER_MAX / 100;
+            // 自动挡：按住 D/R 时持续满油门（松开即回踏板值）
+            if (autoDr == 1 || autoDr == -1) targetThrottle = TRIGGER_MAX;
             int targetBrake = brake * TRIGGER_MAX / 100;
-            if (targetThrottle > 0) targetBrake = 0;
-            if (targetBrake > 0) targetThrottle = 0;
             _lastThrottle = Smooth(_lastThrottle, targetThrottle);
             _lastBrake = Smooth(_lastBrake, targetBrake);
+
+            // 离合 → 右摇杆 Y（0x8000 中心，向下递增 = 踩下）
+            int targetClutch = STICK_CENTER + clutch * (0xFFFF - STICK_CENTER) / 100;
+            _lastClutch = Smooth(_lastClutch, targetClutch, CLUTCH_SMOOTH_STEP);
+
+            // 升/降档脉冲锁存：按下保持数帧，松开后递减到 0
+            if (gearUp > 0) _gearUpTimer = GEAR_HOLD_TICKS;
+            else if (_gearUpTimer > 0) _gearUpTimer--;
+            if (gearDown > 0) _gearDownTimer = GEAR_HOLD_TICKS;
+            else if (_gearDownTimer > 0) _gearDownTimer--;
 
             var report = new XOneInputReport
             {
                 LeftStickX = (ushort)stickX,
                 LeftStickY = STICK_CENTER,
                 RightStickX = STICK_CENTER,
-                RightStickY = STICK_CENTER,
-                LeftTrigger = (ushort)(_lastThrottle & 0x3FF),
-                RightTrigger = (ushort)(_lastBrake & 0x3FF),
+                RightStickY = (ushort)_lastClutch,
+                LeftTrigger = (ushort)(_lastBrake & 0x3FF),     // 左扳机 = 刹车
+                RightTrigger = (ushort)(_lastThrottle & 0x3FF), // 右扳机 = 油门
                 ButtonsMain = 0,
                 ButtonsStick = 0,
                 Hat = 0,
@@ -145,18 +166,39 @@ public sealed class WinUHidDeviceManager : IDisposable
                 BatteryLevel = 0xFF,
             };
 
-            if (gearUp > 0) report.ButtonsMain |= 0x01;   // A
-            if (gearDown > 0) report.ButtonsMain |= 0x02; // B
-            if (handbrake > 0) report.ButtonsMain |= 0x10; // LB
+            if (_gearUpTimer > 0) report.ButtonsMain |= 0x20;   // RB = 升档
+            if (_gearDownTimer > 0) report.ButtonsMain |= 0x10; // LB = 降档
+            if (handbrake > 0) report.ButtonsMain |= 0x02;      // B = 手刹
+
+            // 自动挡 D/R：Y = D（前进）、X = R（倒车）
+            if (autoDr == 1) report.ButtonsMain |= 0x08;        // Y = D
+            else if (autoDr == -1) report.ButtonsMain |= 0x04;  // X = R
+
+            // 手动挡挡位（-1=R, 1..6），5档(3)/6档(4) 共用（Xbox 按钮位有限，最多映射到 6 档）
+            if (gearMode == 3 || gearMode == 4)
+            {
+                switch (gearValue)
+                {
+                    case -1: report.ButtonsMain |= 0x40; break; // Back = R
+                    case 1: report.ButtonsMain |= 0x01; break;  // A = 1档
+                    case 2: report.ButtonsMain |= 0x04; break;  // X = 2档
+                    case 3: report.ButtonsMain |= 0x08; break;  // Y = 3档
+                    case 4: report.ButtonsMain |= 0x10; break;  // LB = 4档
+                    case 5: report.ButtonsMain |= 0x20; break;  // RB = 5档
+                    case 6: report.ButtonsMain |= 0x80; break;  // Menu = 6档
+                }
+            }
 
             WinUHidXOneReportInput(_handle, ref report);
         }
     }
 
-    static int Smooth(int current, int target)
+    static int Smooth(int current, int target) => Smooth(current, target, SMOOTH_STEP);
+
+    static int Smooth(int current, int target, int step)
     {
-        if (current < target) return Math.Min(current + SMOOTH_STEP, target);
-        if (current > target) return Math.Max(current - SMOOTH_STEP, target);
+        if (current < target) return Math.Min(current + step, target);
+        if (current > target) return Math.Max(current - step, target);
         return target;
     }
 
