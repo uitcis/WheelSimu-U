@@ -1,160 +1,262 @@
+# WheelSimu — 手机模拟方向盘，让 PC 游戏认你为手柄/方向盘
 
+WheelSimu 是一套「**手机当方向盘，PC 玩游戏**」的赛车外设方案：
 
-# WheelSimu
+- **Android 手机** 通过重力/陀螺仪感应方向盘角度，屏幕上模拟油门/刹车/档位踏板；
+- **PC 服务端** 接收手机发来的数据，转换为 **vJoy 虚拟手柄**（DirectInput）或 **WinUHid 虚拟 Xbox One 手柄**（XInput）输出给游戏；
+- 无需购买实体方向盘，手机横屏固定在支架上即可畅玩赛车游戏。
 
-WheelSimu 是一款基于 Android 设备的赛车模拟器外设解决方案，通过将 Android 设备的传感器数据（方向盘角度、踏板输入、档位等）转换为 vJoy 虚拟手柄信号，实现与 PC 赛车游戏的完美兼容。
+```
+手机（WheelSimu App）              PC（WheelSimuServer）                 游戏
+┌────────────────┐  TCP/WiFi  ┌──────────────────────────────┐  HID   ┌────────┐
+│ 陀螺仪感应角度   │ ──────────→ │ 角度/油门/刹车/档位/手刹         │ ─────→ │ 识别为  │
+│ 触摸屏模拟踏板   │            │ 输出方式: vJoy / WinUHid(Xbox) │        │ 手柄/   │
+│ 升档/降档按钮   │            │ (顶部下拉随时切换)             │        │ 方向盘  │
+└────────────────┘            └──────────────────────────────┘        └────────┘
+```
+
+---
+
+## 目录
+
+- [功能特性](#功能特性)
+- [系统要求](#系统要求)
+- [安装步骤](#安装步骤)
+- [使用指南](#使用指南)
+- [操作对照表](#操作对照表)
+- [通信协议](#通信协议)
+- [项目结构](#项目结构)
+- [编译说明](#编译说明)
+- [常见问题 FAQ](#常见问题-faq)
+
+---
 
 ## 功能特性
 
-- **方向盘模拟**：支持 540°/720° 方向盘角度检测，实时映射到 vJoy X 轴
-- **三踏板系统**：独立模拟油门、刹车、离合器踏板，精度可调
-- **手刹功能**：支持手刹开关信号输入
-- **档位控制**：支持升档/降档操作
-- **加速度计支持**：双传感器数据采集，提供更精准的动态反馈
-- **网络连接**：支持 TCP/IP 直连和局域网自动发现
-- **自动重连**：网络断开后自动尝试重连，确保游戏体验连续性
-- **vJoy 集成**：通过 vJoy 虚拟手柄驱动，兼容各类赛车游戏
+- **方向盘模拟**：陀螺仪/重力感应检测 540°~900° 转向角度，实时映射输出
+- **三踏板系统**：油门、刹车、离合器独立模拟，触摸滑动控制
+- **档位控制**：升档 / 降档按钮（映射为手柄 A/B 键或 vJoy 按钮）
+- **手刹开关**：一键手刹（映射为 LB 键）
+- **双输出模式**（PC 端顶部下拉随时切换）：
+  - **WinUHid (Xbox One)**：虚拟 Xbox One 手柄，XInput 接口，**现代游戏全兼容**（Forza / WRC / F1 / GTA / 欧卡等），推荐默认
+  - **vJoy 虚拟手柄**：DirectInput 接口，用于较老只认 DirectInput 的游戏，作为回退
+- **零部署**：WinUHid 驱动已内嵌 EXE，首次运行自动安装，无需手动装驱动
+- **网络连接**：TCP 直连 + UDP 局域网自动发现，自动重连
+- **系统托盘**：可最小化隐藏到托盘，后台持续运行
+
+---
 
 ## 系统要求
 
-### Android 端
-- Android 4.3 (API 18) 及以上版本
-- 设备需支持加速度计传感器
-- 横屏模式推荐
+### Android 端（手机）
+- Android 4.3（API 18）及以上
+- 支持加速度计 / 陀螺仪传感器
+- 与 PC 处于**同一局域网**（WiFi 或热点）
 
-### PC 端
-- Windows 7/8/10/11 (64位)
-- 已安装 [vJoy](https://sourceforge.net/projects/vjoy/) 虚拟手柄驱动
-- .NET 6.0 运行时
+### PC 端（Windows）
+- Windows 10 / 11（64 位）
+- `WheelSimuServer.exe` 为**自包含发布**，无需额外安装 .NET 运行时
+- **需要管理员权限**运行（程序会自动弹出 UAC 提权，因为 WinUHid 虚拟设备仅允许管理员访问）
 
-## 安装说明
+### 驱动依赖
+| 输出模式 | 需要安装的驱动 | 说明 |
+|---|---|---|
+| **WinUHid (Xbox One)** | `WinUHidDriver.dll`（UMDF 2.23 + VHF） | **已内嵌进 EXE，自动安装**。首次运行自动开启测试签名并装好驱动（可能需重启一次）；设备管理器出现 `WinUHid Virtual HID Enumerator` 即成功 |
+| **vJoy 虚拟手柄** | vJoy 驱动 | 需手动安装（可选，仅 DirectInput 老游戏用）；设备管理器出现 `vJoy Device` 即成功 |
 
-### 1. 安装 vJoy 驱动
+> WinUHid 驱动**完全无需手动安装**：驱动文件（INF/DLL/CAT/CER）已打包进 `WheelSimuServer.exe`，程序首次启动会自动完成「开启测试签名 → 导入证书 → 安装驱动」全流程。
+> 两套驱动可以**同时存在**，运行时通过顶部下拉随意切换，互不干扰。
 
-1. 下载并安装 [vJoy SDK](https://sourceforge.net/projects/vjoy/) 
-2. 配置 vJoy 设备：确保启用了以下轴和按钮
+---
+
+## 安装步骤
+
+### 第 1 步：安装 PC 端服务器（WinUHid 驱动全自动）
+
+`Release/WheelSimuServer.exe`（自包含单文件，驱动已内嵌）：
+1. **双击运行**，UAC 弹窗点"是"；
+2. 若驱动未装，程序自动完成以下步骤并提示：
+   - 自动开启 Windows 测试签名模式（`bcdedit /set testsigning on`）；
+   - 提示**重启电脑**（仅首次需要）；
+   - 重启后再次双击，程序自动导入驱动证书、安装驱动；
+3. 之后每次双击即可直接使用，无任何额外操作。
+
+> 注意：**首次安装驱动需重启一次电脑**（开启测试签名模式的硬性要求，无法绕过）。这是用户唯一需要手动做的一步。
+
+### 第 2 步：安装 vJoy 驱动（可选，DirectInput 老游戏用）
+
+1. 安装 vJoy 驱动；
+2. 打开 **vJoy 配置**（vJoyConf），确保**设备 1** 启用以下轴/按钮：
    - X Axis（方向盘）
-   - Buttons 1-8（手刹、档位等）
-   - 可选：Z Axis、RX Axis 等
+   - Buttons 1~8（档位、手刹等）
+3. 服务器启动时会自动获取设备 1 控制权。
 
-### 2. 安装 PC 端服务器
+### 第 3 步：安装 Android 端 App
 
-位于 `Release/WheelSimuServer.exe`，双击运行即可。
+将 `Release/WheelSimu.apk` 传到手机并安装（需允许"安装未知来源应用"）。
 
-### 3. 安装 Android 端应用
+---
 
-将 `Release/WheelSimu.apk` 安装到 Android 设备上。
+## 使用指南
 
-## 使用方法
+### 一、启动 PC 服务器
 
-### 启动服务器
+1. 双击 `WheelSimuServer.exe`（**必须以管理员身份运行**，UAC 弹窗选"是"）；
+2. 服务器自动：
+   - 检测并初始化 vJoy 驱动；
+   - 检测 WinUHid 驱动可用性；
+   - 监听 **TCP 5050**（数据端口），UDP **5051** 广播（自动发现）；
+3. 底部状态栏查看：
+   - `vJoy: OK` — vJoy 就绪
+   - `IP: 192.168.x.x:5050` — 手机需要连接的地址
+   - `客户端: 0` — 当前已连接的手机数
+   - `消息: 0` — 收到的数据包计数
 
-1. 运行 `WheelSimuServer.exe`
-2. 服务器会自动广播自身 IP 地址
-3. 确认 vJoy 状态为 "OWN"（已获取控制权）
+> **隐藏到托盘**：关闭窗口会最小化到系统托盘，右键托盘图标可"显示窗口 / 隐藏到托盘 / 退出程序"。
+> **开机自启**：可创建快捷方式放入 `shell:startup` 文件夹，或加启动参数 `--tray` 启动后直接进托盘。
 
-### 连接 Android 应用
+### 二、连接手机
 
-**方式一：自动发现**
-1. 确保手机与 PC 在同一局域网
-2. 点击 Android 端的"网络模式"按钮
-3. 从列表中选择发现的服务器
+**方式 A：自动发现（推荐）**
+1. 保证手机与 PC 在同一局域网；
+2. 打开 App，程序启动后自动监听广播 3 秒，发现服务器后自动填入 IP；
+3. 点击"连接"。
 
-**方式二：手动连接**
-1. 在 Android 端输入 PC 的 IP 地址
-2. 点击"连接"按钮
+**方式 B：手动输入**
+1. 在 App 的 IP 输入框输入 PC 的 IP 与端口，格式 `192.168.x.x:5050`；
+2. 点击"连接"。
 
-### 操作说明
+> **网络模式**：App 顶部"网络模式"按钮可循环切换 `TCP → UDP → 蓝牙`，**默认 TCP 即可**（蓝牙模式用于无 WiFi 的局域网直连）。
 
-| 功能 | 操作方式 |
-|------|----------|
-| 转向 | 倾斜设备或旋转物理方向盘（如有） |
-| 油门/刹车/离合 | 按住对应踏板区域并滑动调整 |
-| 手刹 | 切换手刹开关 |
-| 升档/降档 | 点击升档/降档按钮 |
-| 回正 | 点击"回正角度"按钮 |
-| 开启转向 | 启用"转向使能"开关 |
+> **自动重连**：连接按钮即重连开关（显示"重连: 开"）。断线后自动尝试重连，无需手动干预。
+
+### 三、选择输出方式
+
+服务器**顶部标题栏右侧**有下拉框：
+
+| 下拉选项 | 含义 | 适用 |
+|---|---|---|
+| `vJoy 虚拟手柄` | DirectInput 手柄 | 老游戏 / 只认 DirectInput |
+| `WinUHid (Xbox One)` | **XInput Xbox One 手柄** | **现代游戏（默认推荐）** |
+
+切换后日志区会提示"WinUHid Xbox One 虚拟手柄已创建"或"已切换回 vJoy 输出"。
+
+### 四、开始游戏
+
+1. 手机横屏固定在方向盘支架上，打开 App 并连接成功；
+2. 在游戏中打开手柄设置，应能看到一个 **Xbox One 手柄**（WinUHid 模式）或 **vJoy 手柄**（vJoy 模式）；
+3. 转动手机 / 方向盘 → 游戏内方向盘跟随转动，即可开始游戏。
+
+---
+
+## 操作对照表
+
+| 游戏操作 | 手机操作 | WinUHid 输出 | vJoy 输出 |
+|---|---|---|---|
+| 转向 | 左右倾斜/旋转手机（陀螺仪） | 左摇杆 X 轴 | X 轴 |
+| 油门 | 按住油门踏板滑动 | 左扳机 (LT) | 油门轴 |
+| 刹车 | 按住刹车踏板滑动 | 右扳机 (RT) | 刹车轴 |
+| 离合器 | 按离合踏板（手动挡） | —（预留） | 离合轴 |
+| 升档 | 点"升档"按钮 | A 键 | 按钮 1 |
+| 降档 | 点"降档"按钮 | B 键 | 按钮 2 |
+| 手刹 | 手刹开关 | LB 键 | 按钮 3 |
+| 回正 | 点"回正角度"按钮 | 摇杆回中 | 轴回中 |
+
+> 油门与刹车互斥：同时踩下时优先保留后踩的一侧（防误操作）。
+
+---
+
+## 通信协议
+
+服务器监听 **TCP 5050**，数据为单行 JSON 文本（`\n` 结尾）：
+
+```json
+{"type":"control","angle":45.5,"throttle":75,"brake":0,"clutch":0,"handbrake":0,"gearUp":0,"gearDown":0}
+```
+
+| 字段 | 含义 | 范围 |
+|---|---|---|
+| `angle` | 方向盘角度（度） | 约 -450 ~ +450 |
+| `throttle` | 油门 | 0~100 |
+| `brake` | 刹车 | 0~100 |
+| `clutch` | 离合 | 0~100 |
+| `handbrake` | 手刹 | 0 / 1 |
+| `gearUp` / `gearDown` | 升降档脉冲 | 0 / 1 |
+
+**局域网自动发现**：服务器每 1 秒向 UDP **5051** 广播 `WHEELSIMU_SERVER:<ip>:<port>`，App 收到后自动填入地址。
+
+---
 
 ## 项目结构
 
 ```
 WheelSimu/
-├── WheelSimu/                    # Android 应用项目
-│   ├── MainActivity.cs           # 主界面与核心逻辑
-│   ├── SteeringWheelView.cs      # 方向盘自定义视图
-│   ├── PedalGaugeView.cs         # 踏板表盘自定义视图
-│   ├── CommonCode.cs             # 公共代码
-│   └── Resources/                # 资源文件（布局、图标、样式等）
+├── WheelSimu/                     # Android 应用（Xamarin/.NET Android）
+│   └── WheelSimu/
+│       ├── MainActivity.cs        # 传感器采集 + 网络 + UI
+│       ├── SteeringWheelView.cs   # 方向盘绘制视图
+│       └── PedalGaugeView.cs      # 踏板触摸视图
 │
-├── WheelSimuServer/              # PC 服务器项目
-│   ├── MainForm.cs               # 主窗体与业务逻辑
-│   ├── VJoyDiag.cs               # vJoy 诊断工具
-│   └── Program.cs                # 程序入口
+├── WheelSimuServer/               # PC 服务端（C# / WinForms）
+│   ├── MainForm.cs                # 主窗体：TCP 服务、双输出调度、UI
+│   ├── WinUHidDeviceManager.cs    # WinUHid(Xbox One) P/Invoke 封装
+│   ├── WinUHidDriverInstaller.cs  # 驱动零部署自动安装（内嵌资源解压+签名+SetupAPI）
+│   ├── VJoyDeviceManager.cs       # vJoy 输出封装
+│   ├── Driver/                    # 内嵌驱动源文件（INF/DLL/CAT/CER）
+│   ├── app.manifest               # 管理员提权（requireAdministrator）
+│   └── WheelSimuServer.csproj     # 自包含单文件发布
 │
-└── Release/                      # 发布文件
-    ├── WheelSimu.apk             # Android 安装包
-    └── WheelSimuServer.exe       # Windows 服务器
+└── Release/
+    ├── WheelSimu.apk              # Android 安装包
+    └── WheelSimuServer.exe        # Windows 服务端（单文件）
 ```
 
-## 技术架构
-
-### 通信协议
-
-服务器监听端口 8866，使用 TCP 协议。数据格式为单行 JSON 字符串：
-
-```json
-{
-  "type": "control",
-  "angle": 45.5,
-  "throttle": 75,
-  "brake": 0,
-  "clutch": 0,
-  "handbrake": 0,
-  "gearUp": 0,
-  "gearDown": 0
-}
-```
-
-发现协议使用 UDP 广播，端口 12001，魔数为 `"WheelSimu"`。
-
-### 核心类说明
-
-- **MainActivity**：传感器管理、网络通信、数据发送
-- **SteeringWheelView**：方向盘 UI 渲染，支持角度平滑过渡
-- **PedalGaugeView**：踏板表盘 UI，支持触摸交互
-- **MainForm (Server)**：vJoy 控制、TCP 服务端、客户端管理
+---
 
 ## 编译说明
 
-### Android 项目
+### PC 服务端
 
 ```bash
-# 需要安装 Xamarin.Android 开发环境
-# 使用 Visual Studio 打开 WheelSimu.sln
-# 选择 Release 配置，编译生成 APK
-```
-
-### 服务器项目
-
-```bash
-# 需要 .NET 6.0 SDK
+# 需要 .NET 8.0 SDK；引用的 vJoy/WinUHid DLL 按 csproj 中绝对路径加载
 cd WheelSimuServer
-dotnet build -c Release
+dotnet publish -c Release   # 产物在 bin/Release/net8.0-windows/win-x64/publish
 ```
 
-## 常见问题
+### Android 端
 
-**Q: vJoy 状态显示 MISS**
-A: 检查 vJoy 驱动是否正确安装，尝试重新配置 vJoy 设备
+用 Visual Studio 打开 `WheelSimu.sln`，选择 Release 配置编译生成 APK。
 
-**Q: Android 端无法发现服务器**
-A: 确认防火墙允许 UDP 12001 端口通信，检查是否在同一网络
+---
 
-**Q: 方向盘反应迟缓**
-A: 尝试降低 Android 端的传感器数据发送间隔
+## 常见问题 FAQ
 
-**Q: 踏板数值抖动**
-A: 启用 PedalGaugeView 的平滑滤波功能
+**Q1：启动时 UAC 弹窗？**
+A：正常。WinUHid 虚拟设备仅允许管理员访问，程序通过 `app.manifest` 强制提权。请点"是"。
+
+**Q2：下拉切换到 WinUHid 时提示"驱动不可用 / 切换失败"？**
+A：WinUHid 驱动未安装或未启用测试签名。正常情况下首次运行会自动安装；若失败，检查：
+① 是否以管理员身份运行；② 是否已完成重启（开启测试签名需重启生效）；③ 按 [安装步骤](#第-1-步安装-pc-端服务器winuhid-驱动全自动) 手动重装。
+
+**Q3：游戏里没看到手柄 / 手柄无反应？**
+A：① 先确认服务器日志"WinUHid Xbox One 虚拟手柄已创建"或 vJoy 状态为 OK；② 在游戏设置里重新扫描手柄；③ 若用 vJoy，确认 vJoyConf 中设备 1 已启用 X 轴与按钮。
+
+**Q4：手机连不上服务器？**
+A：① 确认手机与 PC 同一局域网；② 检查 Windows 防火墙是否放行 TCP 5050 与 UDP 5051（首次运行请允许弹窗）；③ 可手动输入 IP 连接（格式 `192.168.x.x:5050`）。
+
+**Q5：转向方向反了？**
+A：把手机反过来装，或在 App 内反转传感器方向（设置里调整）。
+
+**Q6：油门/刹车有延迟？**
+A：服务器对扳机做了平滑过渡（约 30 步/满行程），属正常手感；若延迟明显，检查 WiFi 信号。
+
+**Q7：两种输出模式能同时用吗？**
+A：能同时安装驱动，但**同一时刻只输出一个**（按顶部下拉选择），避免游戏识别到两个手柄混乱。
+
+**Q8：vJoy 状态显示 MISS / 未就绪？**
+A：vJoy 驱动未安装，或 vJoyConf 中设备未启用。此情况下仍可切换到 WinUHid 输出。
+
+---
 
 ## 许可证
 
@@ -162,5 +264,6 @@ A: 启用 PedalGaugeView 的平滑滤波功能
 
 ## 致谢
 
-- [vJoy](https://sourceforge.net/projects/vjoy/) - 虚拟手柄驱动
-- [Xamarin.Android](https://dotnet.microsoft.com/en-us/apps/xamarin/android) - Android 应用开发框架
+- [WinUHid (lurebat)](https://github.com/lurebat/WinUHid) — 虚拟 HID 框架 + Xbox One 预设驱动
+- [vJoy](https://sourceforge.net/projects/vjoy/) — 虚拟手柄驱动
+- [Xamarin.Android](https://dotnet.microsoft.com/en-us/apps/xamarin/android) — Android 应用开发框架

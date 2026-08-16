@@ -14,14 +14,38 @@
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <ApplicationIcon>app.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="C:\Program Files\vJoy\x64\vJoyInterface.dll">
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
+    <!-- vJoy SDK 已拉取到 G:\vJoy\SDK\c#\x64\（原 G:\方向盘\vJoy，2026-08-16 改为 ASCII 路径） -->
+    <Content Include="G:\vJoy\SDK\c#\x64\vJoyInterface.dll">
       <Link>vJoyInterface.dll</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
+    <Content Include="G:\vJoy\SDK\c#\x64\vJoyInterfaceWrap.dll">
+      <Link>vJoyInterfaceWrap.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <!-- WinUHid (lurebat) 已编译产物，2026-08-16 -->
+    <Content Include="G:\WinUHid-lurebat\WinUHid\build\Release\x64\WinUHid.dll">
+      <Link>WinUHid.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="G:\WinUHid-lurebat\WinUHidDevs\build\Release\x64\WinUHidDevs.dll">
+      <Link>WinUHidDevs.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <!-- WinUHid 驱动文件（UMDF 用户态驱动，内嵌 EXE 实现零部署自动安装） -->
+    <EmbeddedResource Include="Driver\WinUHidDriver.inf" />
+    <EmbeddedResource Include="Driver\WinUHidDriver.dll" />
+    <EmbeddedResource Include="Driver\WinUHidDriver.cat" />
+    <EmbeddedResource Include="Driver\WinUHidDriver.cer" />
   </ItemGroup>
 
 </Project>

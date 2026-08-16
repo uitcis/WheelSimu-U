@@ -7,6 +7,9 @@ obj/
 *.dll
 *.pdb
 *.exe.config
+
+# 内嵌到 EXE 的 UMDF 驱动资源必须入库（WinUHidDriver.dll 是驱动核心）
+!WheelSimuServer/Driver/*.dll
 # *.apk  (Release 目录下的发布文件保留)
 
 # IDE

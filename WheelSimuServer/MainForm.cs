@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.Win32;
 
 namespace WheelSimuServer;
 
@@ -37,6 +38,12 @@ public partial class MainForm : Form
     static extern bool UpdateVJD(uint rID, ref JState pData);
     [DllImport("vJoyInterface.dll", CallingConvention = CallingConvention.Cdecl)]
     static extern bool ResetVJD(uint rID);
+    [DllImport("vJoyInterface.dll", CallingConvention = CallingConvention.Cdecl)]
+    static extern bool EnableVJD(uint rID);
+    [DllImport("vJoyInterface.dll", CallingConvention = CallingConvention.Cdecl)]
+    static extern bool DisableVJD(uint rID);
+    [DllImport("vJoyInterface.dll", CallingConvention = CallingConvention.Cdecl)]
+    static extern bool SetAutoManageDevices(bool enable);
 
     // ==================== 配置 ====================
     const int LISTEN_PORT = 5050;
@@ -46,6 +53,12 @@ public partial class MainForm : Form
     const int SMOOTH_STEP = VJOY_AXIS_MAX / 30;
 
     // ==================== 状态 ====================
+    enum OutputMode { VJoy = 0, WinUHid = 1 }
+    OutputMode _outputMode = OutputMode.VJoy;
+    bool _uiReady;          // UI 初始化完成标志（防止 Load 前触发切换）
+    bool xoneReady;
+    readonly WinUHidDeviceManager xoneMgr = new();
+
     volatile bool vJoyReady;
     readonly object vJoyLock = new();
     CancellationTokenSource? _cts;
@@ -69,6 +82,7 @@ public partial class MainForm : Form
     ToolStripStatusLabel lblMsgCount = null!;
     NotifyIcon trayIcon = null!;
     Label lblData = null!;  // 固定行显示实时数据
+    ComboBox cmbOutput = null!; // 输出方式选择
 
     // ==================== 构造函数 ====================
     public MainForm(string[] args)
@@ -110,6 +124,29 @@ public partial class MainForm : Form
             Location = new Point(12, 9)
         };
         pnlTop.Controls.Add(lblTitle);
+
+        // === 输出方式选择（vJoy / WinUHid） ===
+        var lblOut = new Label
+        {
+            Text = "输出方式:",
+            ForeColor = Color.White,
+            AutoSize = true,
+            Location = new Point(pnlTop.Width - 235, 11),
+            Anchor = AnchorStyles.Top | AnchorStyles.Right
+        };
+        cmbOutput = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Width = 175,
+            Location = new Point(pnlTop.Width - 165, 8),
+            Anchor = AnchorStyles.Top | AnchorStyles.Right
+        };
+        cmbOutput.Items.Add("vJoy 虚拟手柄");
+        cmbOutput.Items.Add("WinUHid (Xbox One)");
+        cmbOutput.SelectedIndexChanged += CmbOutput_SelectedIndexChanged;
+        pnlTop.Controls.Add(lblOut);
+        pnlTop.Controls.Add(cmbOutput);
+
         Controls.Add(pnlTop);
 
         // === 日志区域 ===
@@ -256,6 +293,32 @@ public partial class MainForm : Form
 
         Log("");
 
+        // 自动启用 vJoy 设备（运行时才出现，避免干扰 Xbox 手柄）
+        // 优先使用 vJoy 内置的通用自动管理 API（EnableVJD），失败则降级到本地方法
+        try
+        {
+            SetAutoManageDevices(true);
+            if (EnableVJD(VJOY_DEVICE_ID))
+                Log("已启用 vJoy 设备（自动管理模式）");
+            else
+                Log("注意: 启用 vJoy 设备失败（将以仅转发模式运行）");
+        }
+        catch (Exception ex)
+        {
+            Log($"自动启用 vJoy 设备异常: {ex.Message}（降级到本地方法）");
+            try
+            {
+                if (VJoyDeviceManager.EnableDevice(out var enableMsg))
+                    Log(enableMsg);
+                else
+                    Log($"注意: {enableMsg}（将以仅转发模式运行）");
+            }
+            catch (Exception ex2)
+            {
+                Log($"本地启用 vJoy 设备异常: {ex2.Message}");
+            }
+        }
+
         // 初始化 vJoy
         try
         {
@@ -275,6 +338,49 @@ public partial class MainForm : Form
             Log("vJoy 未就绪，仅转发数据，不输出虚拟手柄");
             UpdateStatusUI("vJoy: OFF", "vJoy 未就绪");
         }
+
+        // WinUHid 驱动检测 + 零部署自动安装
+        try
+        {
+            if (WinUHidDeviceManager.DriverAvailable())
+            {
+                Log("WinUHid 驱动已就绪（可在顶部切换 Xbox One 手柄输出）");
+            }
+            else
+            {
+                Log("WinUHid 驱动未安装，尝试自动安装…");
+                var (state, detail) = WinUHidDriverInstaller.EnsureReady();
+                switch (state)
+                {
+                    case WinUHidDriverInstaller.InstallState.Ready:
+                    case WinUHidDriverInstaller.InstallState.Installed:
+                        Log($"WinUHid: {detail}");
+                        break;
+                    case WinUHidDriverInstaller.InstallState.RebootRequired:
+                        Log($"WinUHid: {detail}");
+                        MessageBox.Show(
+                            detail + "\n\n重启完成后请再次运行本程序。",
+                            "需要重启电脑",
+                            MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        break;
+                    default:
+                        Log($"WinUHid: {detail}");
+                        MessageBox.Show(
+                            "WinUHid 驱动自动安装失败：\n" + detail + "\n\n可尝试手动安装（见 README）。",
+                            "驱动安装失败",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        break;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"WinUHid 检测异常: {ex.Message}");
+        }
+
+        // UI 初始化完成，输出方式默认 vJoy
+        _uiReady = true;
+        cmbOutput.SelectedIndex = (int)OutputMode.VJoy;
 
         string ip = GetLocalIP();
         Log($"本机 IP: {ip}");
@@ -315,6 +421,43 @@ public partial class MainForm : Form
             }
             catch { }
         }
+
+        // 自动禁用 vJoy 设备（从系统中移除，Xbox 手柄恢复正常）
+        // 优先使用 vJoy 内置的通用自动管理 API（DisableVJD），失败则降级到本地方法
+        try
+        {
+            if (DisableVJD(VJOY_DEVICE_ID))
+                Log("已禁用 vJoy 设备（自动管理模式）");
+            else
+                Log("注意: 禁用 vJoy 设备失败，建议手动用 vJoyConf 禁用");
+        }
+        catch (Exception ex)
+        {
+            Log($"自动禁用 vJoy 设备异常: {ex.Message}（降级到本地方法）");
+            try
+            {
+                if (VJoyDeviceManager.DisableDevice(out var disableMsg))
+                    Log(disableMsg);
+                else
+                    Log($"注意: {disableMsg}（vJoy 设备可能仍残留，建议手动用 vJoyConf 禁用）");
+            }
+            catch (Exception ex2)
+            {
+                Log($"本地禁用 vJoy 设备异常: {ex2.Message}");
+            }
+        }
+
+        // 释放 WinUHid 虚拟手柄
+        try
+        {
+            xoneMgr.Dispose();
+            Log("WinUHid Xbox One 手柄已释放");
+        }
+        catch (Exception ex)
+        {
+            Log($"释放 WinUHid 异常: {ex.Message}");
+        }
+
         trayIcon.Visible = false;
         trayIcon.Dispose();
     }
@@ -568,8 +711,55 @@ public partial class MainForm : Form
             UpdateStatusUI();
         }
 
-        if (vJoyReady)
+        // 按输出方式分流
+        if (_outputMode == OutputMode.WinUHid)
+        {
+            if (xoneReady) xoneMgr.Report(angle, throttle, brake, clutch, handbrake, gearUp, gearDown);
+        }
+        else if (vJoyReady)
+        {
             UpdateVJoy(angle, throttle, brake, clutch, handbrake, gearUp, gearDown);
+        }
+    }
+
+    // ==================== 输出方式切换 ====================
+    void CmbOutput_SelectedIndexChanged(object? sender, EventArgs e)
+    {
+        if (!_uiReady || cmbOutput.SelectedIndex < 0) return;
+
+        var mode = (OutputMode)cmbOutput.SelectedIndex;
+        if (mode == _outputMode) return;
+
+        try
+        {
+            if (mode == OutputMode.WinUHid)
+            {
+                if (xoneMgr.Create(out var msg))
+                {
+                    Log(msg);
+                    xoneReady = true;
+                }
+                else
+                {
+                    Log("切换失败: " + msg);
+                    cmbOutput.SelectedIndex = (int)OutputMode.VJoy; // 回退（不再触发递归）
+                    return;
+                }
+            }
+            else
+            {
+                xoneMgr.Destroy();
+                xoneReady = false;
+                Log("已切换回 vJoy 输出");
+            }
+
+            _outputMode = mode;
+            UpdateStatusUI(null, $"{cmbOutput.Text} 模式");
+        }
+        catch (Exception ex)
+        {
+            Log($"切换输出方式异常: {ex.Message}");
+        }
     }
 
     /// <summary>从字符串的子区间直接解析 int，不创建 Substring</summary>
