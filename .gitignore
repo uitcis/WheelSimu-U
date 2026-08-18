@@ -34,5 +34,4 @@ WheelSimuServer/WheelSimuServer.csproj.user
 
 # AI working memory / tooling data
 .codebuddy/
-WheelSimu-master.code-workspace
-WheelSimu-master.code-workspace
+*.code-workspace
