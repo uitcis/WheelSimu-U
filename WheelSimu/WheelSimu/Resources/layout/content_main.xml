@@ -381,17 +381,6 @@
                 android:gravity="center"
                 android:layout_marginTop="4dp">
 
-                <Button
-                    android:id="@+id/btnClearAngle"
-                    android:layout_width="0dp"
-                    android:layout_weight="1"
-                    android:layout_height="30dp"
-                    android:text="归零"
-                    android:textColor="#FF80DEEA"
-                    android:textSize="11sp"
-                    android:textStyle="bold"
-                    android:background="@drawable/btn_accent" />
-
                 <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -401,7 +390,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="方向盘"
+                        android:text="数据传输"
                         android:textColor="#8878909C"
                         android:textSize="10sp"
                         android:layout_marginEnd="4dp" />
@@ -437,12 +426,11 @@
                 android:layout_marginBottom="4dp" />
 
             <!-- 手刹（赛车红警示样式） -->
-            <ToggleButton
+            <Button
                 android:id="@+id/HandbrakeSwitch"
                 android:layout_width="match_parent"
                 android:layout_height="42dp"
-                android:textOff="▣ 手刹"
-                android:textOn="■ 手刹"
+                android:text="■ 手刹"
                 android:textColor="#FFFF5252"
                 android:textSize="14sp"
                 android:textStyle="bold"

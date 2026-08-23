@@ -24,7 +24,7 @@ namespace WheelSimu
         private Paint _hubInnerPaint;
         private Paint _markerPaint;
         private Paint _angleTextPaint;
-        private Paint _subTextPaint;
+        private Paint _dotPaint;           // 已连接绿色圆形指示灯
         private Paint _arcBgPaint;         // 背景弧
         private Paint _arcActivePaint;     // 激活角度弧（发光）
         private Paint _centerRingPaint;    // 中心表盘外环
@@ -32,6 +32,12 @@ namespace WheelSimu
         private float _centerX, _centerY, _radius;
         private float _rimWidth;
         private Path _clipCircle = null!;
+
+        /// <summary>方向盘中心文字（如"重连中..."），空字符串则不显示</summary>
+        private string _centerText = "";
+
+        /// <summary>是否已连接：true 时中心显示绿色圆形指示灯</summary>
+        private bool _connected;
 
         public SteeringWheelView(Context context) : base(context) => Init();
         public SteeringWheelView(Context context, IAttributeSet attrs) : base(context, attrs) => Init();
@@ -44,6 +50,28 @@ namespace WheelSimu
             {
                 _angle = value;
                 _smoothAngle = value;
+                Invalidate();
+            }
+        }
+
+        /// <summary>设置方向盘中心显示的文字（如"重连中..."），空字符串则不显示</summary>
+        public string CenterText
+        {
+            get => _centerText;
+            set
+            {
+                _centerText = value ?? "";
+                Invalidate();
+            }
+        }
+
+        /// <summary>设置连接状态：true=中心显示绿色圆形指示灯，false=按 CenterText 显示文字</summary>
+        public bool Connected
+        {
+            get => _connected;
+            set
+            {
+                _connected = value;
                 Invalidate();
             }
         }
@@ -82,24 +110,22 @@ namespace WheelSimu
             _markerPaint.Color = Color.Argb(255, 255, 50, 50);
             _markerPaint.SetShadowLayer(8f, 0, 0, Color.Argb(180, 255, 50, 50));
 
-            // 角度大数字
+            // 中心状态文字（连接状态，由 CenterText 设置）
             _angleTextPaint = new Paint
             {
                 AntiAlias = true,
-                Color = Color.Argb(255, 0, 255, 200),  // 青绿色 HUD 数字
+                Color = Color.Argb(255, 0, 255, 200),  // 青绿色 HUD 文字
                 TextSize = 42f,
                 TextAlign = Paint.Align.Center,
                 FakeBoldText = true,
             };
             _angleTextPaint.SetShadowLayer(6f, 0, 0, Color.Argb(150, 0, 255, 200));
 
-            // 副标题
-            _subTextPaint = new Paint
+            // 已连接指示灯（绿色圆点）
+            _dotPaint = new Paint
             {
                 AntiAlias = true,
-                Color = Color.Argb(180, 120, 180, 200),
-                TextSize = 14f,
-                TextAlign = Paint.Align.Center,
+                Color = Color.Argb(255, 76, 175, 80),  // 绿色
             };
 
             // 背景弧
@@ -406,16 +432,24 @@ namespace WheelSimu
         }
 
         // ================================================================
-        //  中心 HUD — 大数字角度 + 副标题
+        //  中心 HUD — 已连接=绿色圆点 / 未连接=状态文字（如"重连中..."）
         // ================================================================
         private void DrawCenterHUD(Canvas canvas)
         {
-            // 角度数值（中心位置）
-            float textY = _centerY + _angleTextPaint.TextSize * 0.35f;
-            canvas.DrawText($"{_angle:F0}°", _centerX, textY, _angleTextPaint);
+            // 已连接：绿色圆形指示灯（优先于文字）
+            if (_connected)
+            {
+                float r = Math.Max(10f, _radius * 0.10f);
+                _dotPaint.SetShadowLayer(12f, 0, 0, Color.Argb(170, 0, 255, 120));
+                canvas.DrawCircle(_centerX, _centerY, r, _dotPaint);
+                _dotPaint.SetShadowLayer(0, 0, 0, Color.Transparent);
+                return;
+            }
 
-            // 副标题
-            canvas.DrawText("STEER", _centerX, _centerY + 28f, _subTextPaint);
+            // 未连接：按 CenterText 显示（如"重连中..."），空则不绘制
+            if (string.IsNullOrEmpty(_centerText)) return;
+            float textY = _centerY + _angleTextPaint.TextSize * 0.35f;
+            canvas.DrawText(_centerText, _centerX, textY, _angleTextPaint);
         }
     }
 }

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- ================================================================
     模拟方向盘风格布局 — 方向盘带按钮 (像 Logitech G29)
-    方向盘居中放大，轮辐区域集成档位/手刹/归零按钮
+    方向盘居中放大，轮辐区域集成档位/手刹/数据传输开关
     踏板放在方向盘下方左右两侧
     ================================================================ -->
 <LinearLayout
@@ -313,14 +313,14 @@
             </LinearLayout>
         </FrameLayout>
 
-        <!-- 第二行：模式切换 / 归零 / 手刹 / 方向盘开关 -->
+        <!-- 第二行：模式切换 / 手刹 / 数据传输开关 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="40dp"
             android:orientation="horizontal"
             android:gravity="center"
             android:layout_marginTop="4dp"
-            android:weightSum="6">
+            android:weightSum="5">
 
             <Button
                 android:id="@+id/btnGearMode"
@@ -334,24 +334,11 @@
                 android:background="@drawable/btn_dark" />
 
             <Button
-                android:id="@+id/btnClearAngle"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:layout_height="match_parent"
-                android:text="归零"
-                android:textColor="#FF80DEEA"
-                android:textSize="12sp"
-                android:textStyle="bold"
-                android:background="@drawable/btn_accent"
-                android:layout_marginStart="4dp" />
-
-            <ToggleButton
                 android:id="@+id/HandbrakeSwitch"
                 android:layout_width="0dp"
                 android:layout_weight="1"
                 android:layout_height="match_parent"
-                android:textOff="▣ 手刹"
-                android:textOn="■ 手刹"
+                android:text="■ 手刹"
                 android:textColor="#FFFF5252"
                 android:textSize="12sp"
                 android:textStyle="bold"
@@ -369,7 +356,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="方向盘"
+                    android:text="数据传输"
                     android:textColor="#8878909C"
                     android:textSize="11sp"
                     android:layout_marginEnd="6dp" />

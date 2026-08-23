@@ -101,8 +101,7 @@ public sealed class WinUHidWheelDeviceManager : IDisposable
     const uint BTN_AUTO_D    = 0x00000008; // Button 4  = 自动挡 D（按住前进）
     const uint BTN_AUTO_R    = 0x00000010; // Button 5  = 自动挡 R（按住倒车）
     const uint BTN_GEAR_R    = 0x00000020; // Button 6  = 手动挡 R
-    const uint BTN_GEAR_1    = 0x00000040; // Button 7  = 手动挡 1
-    const uint BTN_GEAR_12   = 0x00020000; // Button 18 = 手动挡 12（BTN_GEAR_1 << 11）
+    const uint BTN_GEAR_1    = 0x00000040; // Button 7  = 手动挡 1（1..6 挡 → Button 7..12）
 
     // ============ 映射常量 ============
     const int STICK_CENTER = 0x8000;
@@ -234,8 +233,8 @@ public sealed class WinUHidWheelDeviceManager : IDisposable
     ///   0 简易档：仅油门/刹车，无任何挡位按钮输出。
     ///   1 真实自动挡：按住 D(autoDr=1) 油门持续→满，并输出 Button 4；按住 R(autoDr=-1) 同样满油门 + Button 5。
     ///   2 序列挡：升/降挡为瞬时脉冲，锁存约 60ms 输出 Button 1/2（避免 60Hz 轮询漏检）。
-    ///   3 5档手动挡：gearValue(-1=R, 0=N, 1..12) 点按保持，映射 Button 6=R、Button 7..18=1..12。
-    ///   4 6档手动挡：同 3，仅档位数不同。
+    ///   3 5档手动挡：gearValue(-1=R, 0=N, 1..6) 点按保持，映射 Button 6=R、Button 7..12=1..6。
+    ///   4 6档手动挡：同 3，仅档位数不同（同样 1..6）。
     /// 手刹始终为 Button 3。
     /// </summary>
     public void Report(double angle, int throttle, int brake, int clutch,
@@ -275,11 +274,11 @@ public sealed class WinUHidWheelDeviceManager : IDisposable
             if (autoDr == 1) buttons |= BTN_AUTO_D;
             else if (autoDr == -1) buttons |= BTN_AUTO_R;
 
-            // 手动挡挡位（-1=R, 1..12），5档(3)/6档(4) 共用
+            // 手动挡挡位（-1=R, 1..6），5档(3)/6档(4) 共用（手机端最大仅 6 挡）
             if (gearMode == 3 || gearMode == 4)
             {
                 if (gearValue == -1) buttons |= BTN_GEAR_R;
-                else if (gearValue >= 1 && gearValue <= 12) buttons |= BTN_GEAR_1 << (gearValue - 1);
+                else if (gearValue >= 1 && gearValue <= 6) buttons |= BTN_GEAR_1 << (gearValue - 1);
             }
 
             SubmitRaw(x, _lastThrottle, _lastBrake, _lastClutch, buttons);

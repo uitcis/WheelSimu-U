@@ -45,7 +45,6 @@ namespace WheelSimu
         Button btnSetSru;
         Button btnGearUp;
         Button btnGearDown;
-        Button btnClearAngle;
         Button btnNetMode;
         Button btnLayoutSwitch;  // 布局切换按钮
         Button btnGearMode;      // 档位模式切换按钮
@@ -57,8 +56,11 @@ namespace WheelSimu
         Button btn6GearR;        // 6档手动挡 R
         Button btn6GearN;        // 6档手动挡 N(空挡)
         Button[] btn6ManualGears; // 6档手动挡 1..6
+
+        // 手动挡已改为“点选锁定”（模拟真实 H 挡硬件：拨杆卡入挡槽即保持），
+        // 当前挡位由 _manualGearSelected 统一维护，不再需要按下布尔数组
         Switch SteerEnableSwitch;
-        ToggleButton HandbrakeSwitch;
+        Button HandbrakeSwitch;
         SteeringWheelView steeringWheel;
 
         /// <summary>连接模式: 0=TCP, 1=UDP, 2=蓝牙</summary>
@@ -104,7 +106,6 @@ namespace WheelSimu
         double AcX2, AcY2, AcZ2;
         double TmpX = 0;
         double Hp = 0; //Hemisphere 方向盘大于+-90度的情况
-        double OffSet = 0; //偏移补偿
         readonly double gAngle = 90 / 9.8; //一单位g值对应角度
         private readonly object sensorLock = new object();
 
@@ -202,9 +203,8 @@ namespace WheelSimu
 
             btnGearUp = FindViewById<Button>(Resource.Id.btnGearUp);
             btnGearDown = FindViewById<Button>(Resource.Id.btnGearDown);
-            btnClearAngle = FindViewById<Button>(Resource.Id.btnClearAngle);
             SteerEnableSwitch = FindViewById<Switch>(Resource.Id.SteerEnableSwitch);
-            HandbrakeSwitch = FindViewById<ToggleButton>(Resource.Id.HandbrakeSwitch);
+            HandbrakeSwitch = FindViewById<Button>(Resource.Id.HandbrakeSwitch);
             InitGearControls();
 
             // 程序化创建方向盘视图
@@ -296,15 +296,14 @@ namespace WheelSimu
                 };
             }
 
-            btnClearAngle.Click += delegate
-            {
-                ThreadPool.QueueUserWorkItem(o => BtnClearAngle_OnClick());
-            };
-
             SteerEnableSwitch.Click += delegate
             {
                 ThreadPool.QueueUserWorkItem(o => SteerEnableSwitch_OnClick());
             };
+
+            // 数据传输开关默认打开：启动即启用方向盘传感器并开始发送
+            SteerEnableSwitch.Checked = true;
+            SteerEnableSwitch_OnClick();
 
             //vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv事件接口设置vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
 
@@ -514,7 +513,7 @@ namespace WheelSimu
                     _latestThrottle = (int)gaugeThrottle.Progress;
                     _latestBrake    = (int)gaugeBrake.Progress;
                     _latestClutch   = (int)gaugeClutch.Progress;
-                    _latestHb       = HandbrakeSwitch.Checked ? 1 : 0;
+                    _latestHb       = HandbrakeSwitch.Pressed ? 1 : 0;
                     _latestGearUp   = btnGearUp.Pressed ? 1 : 0;
                     _latestGearDn   = btnGearDown.Pressed ? 1 : 0;
                     _latestGear     = btnGearUp.Pressed ? 1 : (btnGearDown.Pressed ? -1 : 0);
@@ -536,7 +535,9 @@ namespace WheelSimu
                     }
                     else if (_gearMode == 3 || _gearMode == 4)
                     {
-                        // 手动挡（5档/6档）：点按挂挡（保持），_manualGearSelected 为当前挡位
+                        // 手动挡（5档/6档）：点选锁定，模拟真实 H 挡硬件
+                        // “拨杆卡入挡槽即保持，直到拨走”——点一下选中并保持，点其它挡切换，点空挡回 N。
+                        // 挡位由 Click 事件直接写入 _manualGearSelected，这里只负责上报。
                         _latestDr = 0;
                         _latestGearValue = _manualGearSelected;
                     }
@@ -625,8 +626,6 @@ namespace WheelSimu
                         break;
                     }
             }
-            y -= OffSet * (90 - Math.Abs(y)) / 90;
-
             if (TmpX > 0 && AcX1 < 0) //朝向由上变为下
 
             {
@@ -741,6 +740,8 @@ namespace WheelSimu
                 IsConnected = false;
                 RunOnUiThread(() => btnConnect.Text = "重连: 关");
                 RunOnUiThread(() => textView3.Text = "已断开 (自动重连: 关)");
+                RunOnUiThread(() => steeringWheel.Connected = false);
+                RunOnUiThread(() => steeringWheel.CenterText = "");
                 RunOnUiThread(() => btnConnect.Enabled = true);
             }
         }
@@ -824,6 +825,7 @@ namespace WheelSimu
             }
 
             RunOnUiThread(() => textView3.Text = "Connected");
+            RunOnUiThread(() => steeringWheel.Connected = true);
             IsConnected = true;
             CancelReconnect();
             RunOnUiThread(() => btnConnect.Text = "重连: 开");
@@ -858,25 +860,28 @@ namespace WheelSimu
             };
             for (int i = 0; i < 6; i++) btn6ManualGears[i] = FindViewById<Button>(gear6Ids[i]);
 
+            // 手动挡（5档/6档）：点选锁定（tap-to-select），模拟真实 H 挡硬件
+            // “拨杆卡入挡槽即保持，直到拨走”：点一下选中并保持，再点其它挡切换，点空挡回 N。
+            // 用 Click（完整“按下-抬起”手势）而非 Touch 按住，松开手指挡位依然保持。
+            void BindManualSelect(Button btn, int gear)
+            {
+                if (btn == null) return;
+                btn.Click += (s, e) =>
+                {
+                    _manualGearSelected = gear;
+                    UpdateManualGearHighlight();
+                };
+            }
+            BindManualSelect(btnGearR, -1);
+            BindManualSelect(btnGearN, 0);
+            for (int i = 0; i < 5; i++) { int idx = i; BindManualSelect(btnManualGears[i], idx + 1); }
+            BindManualSelect(btn6GearR, -1);
+            BindManualSelect(btn6GearN, 0);
+            for (int i = 0; i < 6; i++) { int idx = i; BindManualSelect(btn6ManualGears[i], idx + 1); }
+
             // 真实自动挡拨动开关：点按切换并保持（再点同挡回空挡）
             if (btnAutoD != null) btnAutoD.Click += (s, e) => ToggleAutoDr(1);
             if (btnAutoR != null) btnAutoR.Click += (s, e) => ToggleAutoDr(-1);
-
-            // 手动挡：点按挂挡（再点同挡或点 N 回空挡）
-            if (btnGearR != null) btnGearR.Click += (s, e) => SelectManualGear(-1);
-            if (btnGearN != null) btnGearN.Click += (s, e) => SelectManualGear(0);
-            for (int i = 0; i < 6; i++)
-            {
-                int gear = i + 1;
-                if (btnManualGears[i] != null) btnManualGears[i].Click += (s, e) => SelectManualGear(gear);
-            }
-            if (btn6GearR != null) btn6GearR.Click += (s, e) => SelectManualGear(-1);
-            if (btn6GearN != null) btn6GearN.Click += (s, e) => SelectManualGear(0);
-            for (int i = 0; i < 6; i++)
-            {
-                int gear = i + 1;
-                if (btn6ManualGears[i] != null) btn6ManualGears[i].Click += (s, e) => SelectManualGear(gear);
-            }
 
             ApplyGearMode();
         }
@@ -901,7 +906,12 @@ namespace WheelSimu
             if (gear6Panel != null) gear6Panel.Visibility = _gearMode == 4 ? ViewStates.Visible : ViewStates.Gone;
 
             if (_gearMode == 1) UpdateAutoDrHighlight();
-            if (_gearMode == 3 || _gearMode == 4) UpdateManualGearHighlight();
+            if (_gearMode == 3 || _gearMode == 4)
+            {
+                // 5档面板没有 6 挡：若上次停留在 6 挡，切回 5 档时回落空挡
+                if (_gearMode == 3 && _manualGearSelected > 5) _manualGearSelected = 0;
+                UpdateManualGearHighlight();
+            }
         }
 
         /// <summary>真实自动挡拨动开关：点按切换并保持（再次点选同挡位则回到空挡）</summary>
@@ -924,13 +934,6 @@ namespace WheelSimu
             SetSelected(btnAutoR, _autoDrSelected == -1);
         }
 
-        /// <summary>选择手动挡挡位（-1=R, 0=N, 1..6），再次点选同挡位则回到空挡</summary>
-        private void SelectManualGear(int gear)
-        {
-            _manualGearSelected = (_manualGearSelected == gear) ? 0 : gear;
-            UpdateManualGearHighlight();
-        }
-
         /// <summary>高亮当前手动挡挂挡，其余恢复暗色</summary>
         private void UpdateManualGearHighlight()
         {
@@ -950,34 +953,6 @@ namespace WheelSimu
             for (int i = 0; i < 6; i++)
                 SetSelected(btn6ManualGears[i], _manualGearSelected == i + 1);
             SetSelected(btn6GearN, _manualGearSelected == 0);
-        }
-
-        private void BtnClearAngle_OnClick()
-        {
-            // 方向盘打开时不归零，避免运动中校准导致误差
-            if (steerEnabled)
-            {
-                RunOnUiThread(() => textView2.Text = "请先关闭方向盘再归零");
-                return;
-            }
-            try
-            {
-                switch (SensorMode)
-                {
-                    case 0: { OffSet = AcY1 * gAngle * 10; break; }
-                    case 1: { OffSet = AcY1 * gAngle; break; }
-                    case 2: { OffSet = (AcY1 - AcY2) * gAngle * 10; break; }
-                    case 3: { OffSet = (AcY1 - AcY2) * gAngle; break; }
-                    default: { OffSet = AcY1 * 10; break; }
-                }
-
-                Hp = 0;
-                RunOnUiThread(() => textView2.Text = "归零完成");
-            }
-            catch (Exception ex)
-            {
-                RunOnUiThread(() => textView2.Text = ex.Message);
-            }
         }
 
         protected override void OnResume()
@@ -1118,6 +1093,8 @@ namespace WheelSimu
             RunOnUiThread(() =>
             {
                 textView3.Text = "连接已断开，稍后自动重连...";
+                steeringWheel.Connected = false;
+                steeringWheel.CenterText = "";
                 btnConnect.Enabled = false;
             });
 
@@ -1135,6 +1112,8 @@ namespace WheelSimu
                     if (IsConnected) { CancelReconnect(); return; }
                     if (!mAutoReconnect) { CancelReconnect(); return; }
                     textView3.Text = $"自动重连中...";
+                    steeringWheel.Connected = false;
+                    steeringWheel.CenterText = "重连中...";
                     btnConnect.Enabled = false;
                 });
 

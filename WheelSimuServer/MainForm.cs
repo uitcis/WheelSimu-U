@@ -43,6 +43,10 @@ public partial class MainForm : Form
     Label lblData = null!;  // 固定行显示实时数据
     ComboBox cmbOutput = null!; // 输出方式选择
 
+    // 虚拟键位监视器
+    readonly Dictionary<int, Button> _keyBitToBtn = new();
+    DateTime _lastKeyRefresh = DateTime.MinValue;
+
     // ==================== 构造函数 ====================
     public MainForm(string[] args)
     {
@@ -60,7 +64,7 @@ public partial class MainForm : Form
     void InitializeComponent()
     {
         Text = "WheelSimu Server v2";
-        Size = new Size(650, 430);
+        Size = new Size(650, 620);
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.Sizable;
         MinimizeBox = true;
@@ -107,6 +111,9 @@ public partial class MainForm : Form
         pnlTop.Controls.Add(cmbOutput);
 
         Controls.Add(pnlTop);
+
+        // 虚拟键位监视器（图形化按键显示）
+        BuildKeyMonitor();
 
         // === 日志区域 ===
         var pnlMain = new Panel { Dock = DockStyle.Fill };
@@ -417,6 +424,9 @@ public partial class MainForm : Form
 
         lblClient.Text = $"客户端: {clientCount}";
         lblMsgCount.Text = $"消息: {msgCount}";
+
+        // 蓝色状态行：只显示连接状态（已连接/未连接），不显示任何具体数据
+        lblData.Text = clientCount > 0 ? "已连接" : "未连接";
     }
 
     // ==================== UDP 广播发现 ====================
@@ -563,9 +573,9 @@ public partial class MainForm : Form
                     else if (keyLen == 2)
                     {
                         char ch2 = msg[pos + 1];
-                        if (ch2 == 'u') ParseInt(msg, eq + 1, valEnd, out gearUp);
-                        else if (ch2 == 'd') ParseInt(msg, eq + 1, valEnd, out gearDown);
-                        else if (ch2 == 'v') ParseInt(msg, eq + 1, valEnd, out gearValue);
+                        if (ch2 == 'u' || ch2 == 'U') ParseInt(msg, eq + 1, valEnd, out gearUp);
+                        else if (ch2 == 'd' || ch2 == 'D') ParseInt(msg, eq + 1, valEnd, out gearDown);
+                        else if (ch2 == 'v' || ch2 == 'V') ParseInt(msg, eq + 1, valEnd, out gearValue);
                     }
                     break;
             }
@@ -573,38 +583,21 @@ public partial class MainForm : Form
             pos = valEnd + 1; // 跳过 ','
         }
 
-        // 日志节流 + 状态栏更新 + 数据行刷新（每 ~1s）
+        // 日志节流 + 状态栏/蓝色状态行刷新（每 ~1s；蓝色行只显示状态，不显示具体数据）
         var now = DateTime.Now;
         if ((now - lastDataLog).TotalSeconds >= 1.0)
         {
             lastDataLog = now;
-            string tag = _outputMode == OutputMode.WinUHidWheel ? "方向盘" : "Xbox";
-
-            // 计算实际输出按钮位（与设备映射一致），供电脑端直观看到按钮消息
-            uint btnBits = 0;
-            if (gearUp > 0) btnBits |= 1u;           // Button1 升挡
-            if (gearDown > 0) btnBits |= 2u;         // Button2 降挡
-            if (handbrake > 0) btnBits |= 4u;        // Button3 手刹
-            if (autoDr == 1) btnBits |= 8u;          // Button4 自动D
-            else if (autoDr == -1) btnBits |= 16u;   // Button5 自动R
-            if (gearMode == 3 || gearMode == 4)      // 手动挡
-            {
-                if (gearValue == -1) btnBits |= 32u;      // Button6 挡R
-                else if (gearValue >= 1 && gearValue <= 12) btnBits |= 64u << (gearValue - 1); // Button7..18 挡1..12
-            }
-            string btnName = "";
-            if ((btnBits & 1u) != 0) btnName += " 升挡";
-            if ((btnBits & 2u) != 0) btnName += " 降挡";
-            if ((btnBits & 4u) != 0) btnName += " 手刹";
-            if ((btnBits & 8u) != 0) btnName += " D";
-            if ((btnBits & 16u) != 0) btnName += " 倒R";
-            if ((btnBits & 32u) != 0) btnName += " 挡R";
-            for (int i = 0; i < 12; i++)
-                if ((btnBits & (64u << i)) != 0) btnName += $" 挡{i + 1}";
-
-            string dataLine = $"[{tag} #{msgCount}] A={angle:F1} T={throttle} B={brake} C={clutch} HB={handbrake} M={gearMode} DR={autoDr} GV={gearValue} BTN=0x{btnBits:X8}{btnName}";
-            BeginInvoke(() => lblData.Text = dataLine);
             UpdateStatusUI();
+        }
+
+        // 图形化键位监视器高频刷新（约 30ms 一次：按下即亮、松开即灰）
+        var tnow = DateTime.Now;
+        if ((tnow - _lastKeyRefresh).TotalMilliseconds >= 30)
+        {
+            _lastKeyRefresh = tnow;
+            uint liveBits = ComputeBtnBits(gearUp, gearDown, handbrake, autoDr, gearMode, gearValue);
+            BeginInvoke(() => RefreshKeyPanel(liveBits));
         }
 
         // 按输出方式分流
@@ -616,6 +609,100 @@ public partial class MainForm : Form
         {
             if (wheelReady) wheelMgr.Report(angle, throttle, brake, clutch, handbrake, gearUp, gearDown, gearMode, autoDr, gearValue);
         }
+    }
+
+    // ==================== 虚拟键位监视器（图形化按键显示） ====================
+    void BuildKeyMonitor()
+    {
+        var pnlKeys = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 188,
+            BackColor = Color.FromArgb(37, 37, 38),
+            Padding = new Padding(8, 4, 8, 4)
+        };
+        var flp = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            BackColor = Color.FromArgb(37, 37, 38)
+        };
+
+        void AddGroup(string title, params (int bit, string text)[] keys)
+        {
+            flp.Controls.Add(new Label
+            {
+                Text = title,
+                ForeColor = Color.FromArgb(150, 150, 155),
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                AutoSize = true,
+                Margin = new Padding(0, 5, 0, 2)
+            });
+            var row = new FlowLayoutPanel
+            {
+                FlowDirection = FlowDirection.LeftToRight,
+                AutoSize = true,
+                WrapContents = true,
+                BackColor = Color.FromArgb(37, 37, 38),
+                Margin = new Padding(0, 0, 0, 2)
+            };
+            foreach (var k in keys)
+            {
+                var b = new Button
+                {
+                    Text = k.text,
+                    Size = new Size(58, 30),
+                    Margin = new Padding(3),
+                    FlatStyle = FlatStyle.Flat,
+                    BackColor = Color.FromArgb(58, 58, 62),
+                    ForeColor = Color.Gray,
+                    Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                    TabStop = false,
+                    Tag = k.bit
+                };
+                b.FlatAppearance.BorderColor = Color.FromArgb(90, 90, 95);
+                b.FlatAppearance.BorderSize = 1;
+                _keyBitToBtn[k.bit] = b;
+                row.Controls.Add(b);
+            }
+            flp.Controls.Add(row);
+        }
+
+        AddGroup("控制键",
+            (1, "升挡"), (2, "降挡"), (4, "手刹"), (8, "自动D"), (16, "自动R"), (32, "挡R"));
+        AddGroup("手动挡 1-6",
+            (64, "1挡"), (128, "2挡"), (256, "3挡"), (512, "4挡"), (1024, "5挡"), (2048, "6挡"));
+
+        pnlKeys.Controls.Add(flp);
+        Controls.Add(pnlKeys);
+    }
+
+    void RefreshKeyPanel(uint bits)
+    {
+        foreach (var kv in _keyBitToBtn)
+        {
+            bool on = (bits & kv.Key) != 0;
+            kv.Value.BackColor = on ? Color.FromArgb(255, 82, 82) : Color.FromArgb(58, 58, 62);
+            kv.Value.ForeColor = on ? Color.White : Color.Gray;
+            kv.Value.FlatAppearance.BorderColor = on ? Color.FromArgb(255, 138, 138) : Color.FromArgb(90, 90, 95);
+        }
+    }
+
+    static uint ComputeBtnBits(int gearUp, int gearDown, int handbrake, int autoDr, int gearMode, int gearValue)
+    {
+        uint btnBits = 0;
+        if (gearUp > 0) btnBits |= 1u;
+        if (gearDown > 0) btnBits |= 2u;
+        if (handbrake > 0) btnBits |= 4u;
+        if (autoDr == 1) btnBits |= 8u;
+        else if (autoDr == -1) btnBits |= 16u;
+        if (gearMode == 3 || gearMode == 4)
+        {
+            if (gearValue == -1) btnBits |= 32u;
+            else if (gearValue >= 1 && gearValue <= 6) btnBits |= 64u << (gearValue - 1);
+        }
+        return btnBits;
     }
 
     // ==================== 输出方式切换 ====================
