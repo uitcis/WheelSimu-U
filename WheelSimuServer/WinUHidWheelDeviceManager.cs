@@ -106,9 +106,10 @@ public sealed class WinUHidWheelDeviceManager : IDisposable
     // ============ 映射常量 ============
     const int STICK_CENTER = 0x8000;
     const int AXIS_MAX = 0xFFFF;
-    // 满行程 ±225°（等效比例 angle/450，保证手机角度与游戏方向盘 1:1）
-    // 说明：中心 32768/半程 32767，若用 /900 则手机转 90° 游戏只转 45°，因此必须用 /450。
-    const double ANGLE_RATIO = 32767.0 / 450.0;
+    // 满行程 ±540°（等效比例 angle/540，对应 1080° 方向盘转角，保证手机角度与游戏 1:1）
+    // 说明：中心 32768/半程 32767；手机转 90° → 轴偏移 16.7% 行程 → 游戏方向盘转 90°。
+    // 旧值 /450（±225° 满行程）会让游戏按 ±540° 解释轴，手机转 90° 游戏转约 108°，比例偏快。
+    const double ANGLE_RATIO = 32767.0 / 540.0;
     const int SMOOTH_STEP = AXIS_MAX / 30;
     const int CLUTCH_SMOOTH_STEP = AXIS_MAX / 60;
     const int GEAR_HOLD_TICKS = 6;   // 升降档脉冲保持 ~60ms

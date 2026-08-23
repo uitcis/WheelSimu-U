@@ -36,3 +36,6 @@ WheelSimuServer/WheelSimuServer.csproj.user
 .codebuddy/
 .workbuddy/
 *.code-workspace
+
+# 发行产物不入库（含 68MB 大文件 exe/apk，本地 Release/ 保留）
+Release/
