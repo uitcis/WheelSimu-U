@@ -93,7 +93,18 @@ public static class WinUHidDriverInstaller
 
             // 1. 驱动已就绪则直接返回（覆盖已装好 / 证书已导入场景）
             if (IsDriverReady())
+            {
+                // 驱动能正常加载且签名证书已受信任 → 不再需要测试签名模式，主动关闭（需重启生效）
+                if (IsCertInstalled(out _) && IsTestSigningEnabled())
+                {
+                    string? offMsg = DisableTestSigning();
+                    if (offMsg != null)
+                        return (InstallState.Ready, "WinUHid 驱动已就绪（提示：自动关闭测试签名模式失败: " + offMsg + "）");
+                    return (InstallState.RebootRequired,
+                        "WinUHid 驱动已就绪，已自动关闭测试签名模式。重启电脑后生效（右下角水印将消失）。");
+                }
                 return (InstallState.Ready, "WinUHid 驱动已就绪");
+            }
 
             // 2. 签名证书
             if (!IsCertInstalled(out string certName))
@@ -211,6 +222,22 @@ public static class WinUHidDriverInstaller
         try
         {
             int code = RunBcdeditExitCode("/set testsigning on");
+            if (code != 0)
+                return $"bcdedit 退出码 {code}（请以管理员身份运行本程序）";
+            return null;
+        }
+        catch (Exception ex)
+        {
+            return ex.Message;
+        }
+    }
+
+    /// <summary>关闭测试签名模式（恢复系统默认安全级别）。成功返回 null，失败返回错误信息。</summary>
+    public static string? DisableTestSigning()
+    {
+        try
+        {
+            int code = RunBcdeditExitCode("/set testsigning off");
             if (code != 0)
                 return $"bcdedit 退出码 {code}（请以管理员身份运行本程序）";
             return null;
