@@ -47,6 +47,11 @@ public partial class MainForm : Form
     readonly Dictionary<int, Button> _keyBitToBtn = new();
     DateTime _lastKeyRefresh = DateTime.MinValue;
 
+    // 方向盘角度指示器
+    double _currentAngle;  // 当前角度（度）
+    PictureBox picWheel = null!;  // 角度指示器画布
+    DateTime _lastAngleRefresh = DateTime.MinValue;
+
     // ==================== 构造函数 ====================
     public MainForm(string[] args)
     {
@@ -64,7 +69,7 @@ public partial class MainForm : Form
     void InitializeComponent()
     {
         Text = "WheelSimu Server v2";
-        Size = new Size(650, 620);
+        Size = new Size(650, 720);
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.Sizable;
         MinimizeBox = true;
@@ -112,7 +117,7 @@ public partial class MainForm : Form
 
         Controls.Add(pnlTop);
 
-        // 虚拟键位监视器（图形化按键显示）
+        // 虚拟键位监视器（图形化按键显示，含角度指示器）
         BuildKeyMonitor();
 
         // === 日志区域 ===
@@ -145,18 +150,18 @@ public partial class MainForm : Form
         logMenu.Items.Add("清空日志", null, (s, e) => rtbLogs.Clear());
         rtbLogs.ContextMenuStrip = logMenu;
 
-        // === 底部固定数据行 ===
+        // 消息栏
         lblData = new Label
         {
             Text = "等待客户端数据...",
             Dock = DockStyle.Bottom,
             BackColor = Color.FromArgb(40, 40, 40),
             ForeColor = Color.FromArgb(100, 200, 255),
-            Font = new Font("Consolas", 10f, FontStyle.Bold),
+            Font = new Font("Consolas", 9f, FontStyle.Bold),
             AutoSize = false,
             TextAlign = ContentAlignment.MiddleLeft,
             Padding = new Padding(8, 0, 0, 0),
-            Height = 24,
+            Height = 20,
         };
         pnlMain.Controls.Add(lblData);
 
@@ -301,11 +306,8 @@ public partial class MainForm : Form
         // WinUHid 驱动检测 + 零部署自动安装
         try
         {
-            if (WinUHidDeviceManager.DriverAvailable())
-            {
-                Log("WinUHid 驱动已就绪（可在顶部切换 Xbox One 手柄 / 方向盘输出）");
-            }
-            else
+            bool driverReady = WinUHidDeviceManager.DriverAvailable();
+            if (!driverReady)
             {
                 Log("WinUHid 驱动未安装，尝试自动安装…");
                 var (state, detail) = WinUHidDriverInstaller.EnsureReady();
@@ -314,6 +316,7 @@ public partial class MainForm : Form
                     case WinUHidDriverInstaller.InstallState.Ready:
                     case WinUHidDriverInstaller.InstallState.Installed:
                         Log($"WinUHid: {detail}");
+                        driverReady = true;
                         break;
                     case WinUHidDriverInstaller.InstallState.RebootRequired:
                         Log($"WinUHid: {detail}");
@@ -331,10 +334,34 @@ public partial class MainForm : Form
                         break;
                 }
             }
+            else
+            {
+                Log("WinUHid 驱动已就绪（可在顶部切换 Xbox One 手柄 / 方向盘输出）");
+            }
+
+            // 驱动就绪后，自动创建默认的虚拟方向盘设备
+            if (driverReady)
+            {
+                BeginInvoke(() => CreateDefaultDevice());
+            }
         }
         catch (Exception ex)
         {
             Log($"WinUHid 检测异常: {ex.Message}");
+        }
+    }
+
+    /// <summary>创建默认的虚拟设备（方向盘模式）</summary>
+    void CreateDefaultDevice()
+    {
+        if (wheelMgr.Create(out var msg))
+        {
+            Log(msg);
+            wheelReady = true;
+        }
+        else
+        {
+            Log("虚拟方向盘创建失败: " + msg);
         }
     }
 
@@ -583,7 +610,7 @@ public partial class MainForm : Form
             pos = valEnd + 1; // 跳过 ','
         }
 
-        // 日志节流 + 状态栏/蓝色状态行刷新（每 ~1s；蓝色行只显示状态，不显示具体数据）
+        // 日志节流 + 状态栏刷新（每 ~1s）
         var now = DateTime.Now;
         if ((now - lastDataLog).TotalSeconds >= 1.0)
         {
@@ -591,13 +618,20 @@ public partial class MainForm : Form
             UpdateStatusUI();
         }
 
-        // 图形化键位监视器高频刷新（约 30ms 一次：按下即亮、松开即灰）
-        var tnow = DateTime.Now;
-        if ((tnow - _lastKeyRefresh).TotalMilliseconds >= 30)
+        // 图形化键位监视器刷新（约 30ms 一次）
+        if ((now - _lastKeyRefresh).TotalMilliseconds >= 30)
         {
-            _lastKeyRefresh = tnow;
+            _lastKeyRefresh = now;
             uint liveBits = ComputeBtnBits(gearUp, gearDown, handbrake, autoDr, gearMode, gearValue);
             BeginInvoke(() => RefreshKeyPanel(liveBits));
+        }
+
+        // 方向盘角度指示器刷新（约 50ms 一次）
+        _currentAngle = angle;
+        if ((now - _lastAngleRefresh).TotalMilliseconds >= 50)
+        {
+            _lastAngleRefresh = now;
+            BeginInvoke(() => RefreshAngleIndicator());
         }
 
         // 按输出方式分流
@@ -611,22 +645,29 @@ public partial class MainForm : Form
         }
     }
 
-    // ==================== 虚拟键位监视器（图形化按键显示） ====================
+    // ==================== 虚拟键位监视器 + 角度指示器 ====================
     void BuildKeyMonitor()
     {
-        var pnlKeys = new Panel
+        // 使用 TableLayoutPanel 实现左右布局
+        var tableLayout = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 188,
+            Height = 150,
             BackColor = Color.FromArgb(37, 37, 38),
-            Padding = new Padding(8, 4, 8, 4)
+            ColumnCount = 2,
+            RowCount = 1,
+            Padding = new Padding(5, 5, 5, 5)
         };
+        tableLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60F));  // 左60%：按键区
+        tableLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40F));  // 右40%：角度指示器
+
+        // 左侧：按键区域
         var flp = new FlowLayoutPanel
         {
-            Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.TopDown,
             WrapContents = false,
-            BackColor = Color.FromArgb(37, 37, 38)
+            BackColor = Color.FromArgb(37, 37, 38),
+            Dock = DockStyle.Fill
         };
 
         void AddGroup(string title, params (int bit, string text)[] keys)
@@ -637,7 +678,7 @@ public partial class MainForm : Form
                 ForeColor = Color.FromArgb(150, 150, 155),
                 Font = new Font("Segoe UI", 9f, FontStyle.Bold),
                 AutoSize = true,
-                Margin = new Padding(0, 5, 0, 2)
+                Margin = new Padding(0, 3, 0, 2)
             });
             var row = new FlowLayoutPanel
             {
@@ -652,12 +693,12 @@ public partial class MainForm : Form
                 var b = new Button
                 {
                     Text = k.text,
-                    Size = new Size(58, 30),
-                    Margin = new Padding(3),
+                    Size = new Size(50, 26),
+                    Margin = new Padding(2),
                     FlatStyle = FlatStyle.Flat,
                     BackColor = Color.FromArgb(58, 58, 62),
                     ForeColor = Color.Gray,
-                    Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                    Font = new Font("Segoe UI", 8f, FontStyle.Bold),
                     TabStop = false,
                     Tag = k.bit
                 };
@@ -674,8 +715,142 @@ public partial class MainForm : Form
         AddGroup("手动挡 1-6",
             (64, "1挡"), (128, "2挡"), (256, "3挡"), (512, "4挡"), (1024, "5挡"), (2048, "6挡"));
 
-        pnlKeys.Controls.Add(flp);
-        Controls.Add(pnlKeys);
+        tableLayout.Controls.Add(flp, 0, 0);
+
+        // 右侧：圆形角度指示器
+        var pnlAngle = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Color.FromArgb(37, 37, 38)
+        };
+
+        picWheel = new PictureBox
+        {
+            Size = new Size(120, 120),
+            BackColor = Color.FromArgb(45, 45, 48),
+            SizeMode = PictureBoxSizeMode.Normal
+        };
+        pnlAngle.Controls.Add(picWheel);
+        picWheel.Paint += (s, e) => DrawWheelIndicator(e.Graphics, picWheel.Width, picWheel.Height);
+        pnlAngle.Resize += (s, e) => PositionAnglePanel(pnlAngle);
+
+        tableLayout.Controls.Add(pnlAngle, 1, 0);
+
+        Controls.Add(tableLayout);
+    }
+
+    void PositionAnglePanel(Panel parent)
+    {
+        if (picWheel == null || picWheel.IsDisposed) return;
+        picWheel.Left = (parent.ClientSize.Width - picWheel.Width) / 2;
+        picWheel.Top = (parent.ClientSize.Height - picWheel.Height) / 2;
+    }
+
+    void PositionControls(Panel parent)
+    {
+        if (picWheel == null || picWheel.IsDisposed) return;
+
+        // picWheel 居中
+        picWheel.Left = (parent.ClientSize.Width - picWheel.Width) / 2;
+        picWheel.Top = (parent.ClientSize.Height - picWheel.Height) / 2;
+    }
+
+    // ==================== 方向盘角度指示器 ====================
+    void DrawWheelIndicator(Graphics g, int w, int h)
+    {
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        g.Clear(Color.Transparent);
+
+        int cx = w / 2, cy = h / 2;
+        int radius = Math.Min(w, h) / 2 - 5;
+
+        // 外圈（刻度盘背景）
+        using (var bgBrush = new SolidBrush(Color.FromArgb(50, 50, 55)))
+        {
+            g.FillEllipse(bgBrush, cx - radius, cy - radius, radius * 2, radius * 2);
+        }
+
+        // 刻度线（每 45 度一个主刻度，每 15 度一个副刻度）
+        using (var tickPen = new Pen(Color.FromArgb(100, 100, 110), 1))
+        using (var majorTickPen = new Pen(Color.FromArgb(180, 180, 190), 2))
+        {
+            for (int deg = -180; deg <= 180; deg += 15)
+            {
+                bool isMajor = deg % 45 == 0;
+                var pen = isMajor ? majorTickPen : tickPen;
+                double rad = deg * Math.PI / 180.0;
+                float innerR = radius - (isMajor ? 12 : 8);
+                float outerR = radius - 3;
+                float x1 = (float)(cx + Math.Sin(rad) * innerR);
+                float y1 = (float)(cy - Math.Cos(rad) * innerR);
+                float x2 = (float)(cx + Math.Sin(rad) * outerR);
+                float y2 = (float)(cy - Math.Cos(rad) * outerR);
+                g.DrawLine(pen, x1, y1, x2, y2);
+
+                // 主刻度数字
+                if (isMajor && deg != 0)
+                {
+                    float textR = radius - 22;
+                    float tx = (float)(cx + Math.Sin(rad) * textR);
+                    float ty = (float)(cy - Math.Cos(rad) * textR);
+                    using var font = new Font("Segoe UI", 7f);
+                    using var brush = new SolidBrush(Color.FromArgb(150, 150, 160));
+                    var size = g.MeasureString(Math.Abs(deg).ToString(), font);
+                    g.DrawString(Math.Abs(deg).ToString(), font, brush, tx - size.Width / 2, ty - size.Height / 2);
+                }
+            }
+        }
+
+        // 中心点
+        using (var centerBrush = new SolidBrush(Color.FromArgb(60, 60, 65)))
+        {
+            g.FillEllipse(centerBrush, cx - 6, cy - 6, 12, 12);
+        }
+
+        // 方向盘指针（根据当前角度旋转）
+        double angleRad = _currentAngle * Math.PI / 180.0;
+        float pointerLen = radius - 25;
+        float px = (float)(cx + Math.Sin(angleRad) * pointerLen);
+        float py = (float)(cy - Math.Cos(angleRad) * pointerLen);
+
+        // 指针颜色：居中附近偏绿，极端位置偏红
+        double absAngle = Math.Abs(_currentAngle);
+        byte r = (byte)Math.Min(255, absAngle * 2);
+        byte g2 = (byte)Math.Max(50, 200 - absAngle * 1.5);
+
+        using (var pointerPen = new Pen(Color.FromArgb(r, g2, 50), 4))
+        {
+            pointerPen.StartCap = System.Drawing.Drawing2D.LineCap.Round;
+            pointerPen.EndCap = System.Drawing.Drawing2D.LineCap.Triangle;
+            g.DrawLine(pointerPen, cx, cy, px, py);
+        }
+
+        // 指针端点圆点
+        using (var tipBrush = new SolidBrush(Color.FromArgb(r, g2, 50)))
+        {
+            g.FillEllipse(tipBrush, px - 5, py - 5, 10, 10);
+        }
+
+        // 更新角度数字
+        var lblAngle = picWheel.Tag as Label;
+        if (lblAngle != null)
+        {
+            string angleText = $"{_currentAngle:F0}°";
+            if (lblAngle.Text != angleText)
+            {
+                lblAngle.Text = angleText;
+                // 颜色同步指针
+                lblAngle.ForeColor = Color.FromArgb(r, g2, 50);
+            }
+        }
+    }
+
+    void RefreshAngleIndicator()
+    {
+        if (picWheel != null && !picWheel.IsDisposed)
+        {
+            picWheel.Invalidate();
+        }
     }
 
     void RefreshKeyPanel(uint bits)

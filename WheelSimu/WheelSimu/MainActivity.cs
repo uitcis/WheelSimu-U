@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -48,7 +48,9 @@ namespace WheelSimu
         Button btnNetMode;
         Button btnLayoutSwitch;  // 布局切换按钮
         Button btnGearMode;      // 档位模式切换按钮
+        Button btnAutoP;         // 真实自动挡 P(驻车) 拨动开关
         Button btnAutoD;         // 真实自动挡 D(前进) 拨动开关
+        Button btnAutoN;         // 真实自动挡 N(空挡) 拨动开关
         Button btnAutoR;         // 真实自动挡 R(倒车) 拨动开关
         Button btnGearR;         // 5档手动挡 R
         Button btnGearN;         // 5档手动挡 N(空挡)
@@ -72,7 +74,7 @@ namespace WheelSimu
         /// <summary>档位模式: 0=简易档(仅油门刹车), 1=真实自动挡(D/R拨动开关), 2=序列挡, 3=5档手动挡, 4=6档手动挡</summary>
         private int _gearMode = 0;
 
-        /// <summary>真实自动挡拨动开关: 0=N(空挡), 1=D(前进), -1=R(倒车)</summary>
+        /// <summary>真实自动挡拨动开关: 0=N(空挡), 1=D(前进), -1=R(倒车), 2=P(驻车)</summary>
         private int _autoDrSelected = 0;
 
         /// <summary>手动挡当前挂挡: -1=R, 0=N, 1..6</summary>
@@ -836,7 +838,9 @@ namespace WheelSimu
         private void InitGearControls()
         {
             btnGearMode = FindViewById<Button>(Resource.Id.btnGearMode);
+            btnAutoP = FindViewById<Button>(Resource.Id.btnAutoP);
             btnAutoD = FindViewById<Button>(Resource.Id.btnAutoD);
+            btnAutoN = FindViewById<Button>(Resource.Id.btnAutoN);
             btnAutoR = FindViewById<Button>(Resource.Id.btnAutoR);
             btnGearR = FindViewById<Button>(Resource.Id.btnGearR);
             btnGearN = FindViewById<Button>(Resource.Id.btnGearN);
@@ -880,8 +884,10 @@ namespace WheelSimu
             for (int i = 0; i < 6; i++) { int idx = i; BindManualSelect(btn6ManualGears[i], idx + 1); }
 
             // 真实自动挡拨动开关：点按切换并保持（再点同挡回空挡）
-            if (btnAutoD != null) btnAutoD.Click += (s, e) => ToggleAutoDr(1);
-            if (btnAutoR != null) btnAutoR.Click += (s, e) => ToggleAutoDr(-1);
+            if (btnAutoP != null) btnAutoP.Click += (s, e) => ToggleAutoDr(2);  // P=驻车
+            if (btnAutoD != null) btnAutoD.Click += (s, e) => ToggleAutoDr(1);  // D=前进
+            if (btnAutoN != null) btnAutoN.Click += (s, e) => ToggleAutoDr(0);  // N=空挡
+            if (btnAutoR != null) btnAutoR.Click += (s, e) => ToggleAutoDr(-1); // R=倒车
 
             ApplyGearMode();
         }
@@ -921,7 +927,7 @@ namespace WheelSimu
             UpdateAutoDrHighlight();
         }
 
-        /// <summary>高亮真实自动挡拨动开关选中的挡位（D 或 R），未选中时暗色</summary>
+        /// <summary>高亮真实自动挡拨动开关选中的挡位（P/D/N/R），未选中时暗色</summary>
         private void UpdateAutoDrHighlight()
         {
             void SetSelected(Button btn, bool sel)
@@ -930,7 +936,9 @@ namespace WheelSimu
                 btn.SetBackgroundResource(sel ? Resource.Drawable.btn_accent : Resource.Drawable.btn_dark);
             }
 
+            SetSelected(btnAutoP, _autoDrSelected == 2);
             SetSelected(btnAutoD, _autoDrSelected == 1);
+            SetSelected(btnAutoN, _autoDrSelected == 0);
             SetSelected(btnAutoR, _autoDrSelected == -1);
         }
 

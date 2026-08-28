@@ -20,12 +20,12 @@
   <ItemGroup>
     <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
     <!-- WinUHid (lurebat) 已编译产物，2026-08-16 -->
-    <Content Include="G:\WinUHid-lurebat\WinUHid\build\Release\x64\WinUHid.dll">
+    <Content Include="bin\Release\net8.0-windows\win-x64\WinUHid.dll">
       <Link>WinUHid.dll</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
-    <Content Include="G:\WinUHid-lurebat\WinUHidDevs\build\Release\x64\WinUHidDevs.dll">
+    <Content Include="bin\Release\net8.0-windows\win-x64\WinUHidDevs.dll">
       <Link>WinUHidDevs.dll</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>

@@ -181,20 +181,48 @@
                         android:textSize="12sp" />
                 </LinearLayout>
 
-                <!-- 真实自动挡面板：拨动开关，上=D 前进 / 下=R 倒车，点按切换保持，换挡由游戏自动完成 -->
+                <!-- 真实自动挡面板：P=驻车 / D=前进 / N=空挡 / R=倒车 -->
                 <LinearLayout
                     android:id="@+id/autoGearPanel"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:orientation="vertical">
                     <Button
+                        android:id="@+id/btnAutoP"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="0.4"
+                        android:text="P 驻车"
+                        android:textColor="#FFFFB74D"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:background="@drawable/btn_dark" />
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="#FF4B535C" />
+                    <Button
                         android:id="@+id/btnAutoD"
                         android:layout_width="match_parent"
                         android:layout_height="0dp"
-                        android:layout_weight="0.5"
+                        android:layout_weight="0.4"
                         android:text="D 前进"
                         android:textColor="#FF69F0AE"
-                        android:textSize="12sp"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:background="@drawable/btn_dark" />
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="#FF4B535C" />
+                    <Button
+                        android:id="@+id/btnAutoN"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="0.4"
+                        android:text="N 空挡"
+                        android:textColor="#FF80DEEA"
+                        android:textSize="11sp"
                         android:textStyle="bold"
                         android:background="@drawable/btn_dark" />
                     <View
@@ -205,10 +233,10 @@
                         android:id="@+id/btnAutoR"
                         android:layout_width="match_parent"
                         android:layout_height="0dp"
-                        android:layout_weight="0.5"
+                        android:layout_weight="0.4"
                         android:text="R 倒车"
                         android:textColor="#FFFF5252"
-                        android:textSize="12sp"
+                        android:textSize="11sp"
                         android:textStyle="bold"
                         android:background="@drawable/btn_dark" />
                 </LinearLayout>

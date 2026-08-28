@@ -113,12 +113,13 @@ public sealed class WinUHidDeviceManager : IDisposable
     }
 
     /// <summary>
-    /// 提交输入报告。映射（方向盘标准布局，三踏板独立通道）：
-    ///   角度 → 左摇杆 X；油门 → 右扳机；刹车 → 左扳机；离合 → 右摇杆 Y（向下踩）；
-    ///   升档 → RB（右拨片）；降档 → LB（左拨片）；手刹 → B；
-    ///   自动挡：D→Y（满油门）、R→X（满油门）；
-    ///   手动挡：R→Back、1→A、2→X、3→Y、4→LB、5→RB、6→Menu。
-    ///   升/降档为瞬时脉冲，自动锁存约 60ms，避免游戏 60Hz 轮询漏检。
+    /// 提交输入报告。映射（行业标准布局，Logitech/Fanatec H 挡通用）：
+    ///   角度 → 左摇杆 X；油门 → 右扳机；刹车 → 左扳机；离合 → 右摇杆 Y；
+    ///   升降档（序列挡）：RB=升档，LB=降档；
+    ///   手刹 → Menu（独立按钮）；
+    ///   自动挡（gearMode=1）：D=A（前进），R=X（倒车）；
+    ///   手动挡（gearMode=3/4）：R=Back, 1=LB, 2=RB, 3=A, 4=B, 5=X, 6=Y（行业 H 挡标准顺序）。
+    ///   油门由右扳机独立控制，不与挡位耦合。
     /// </summary>
     public void Report(double angle, int throttle, int brake, int clutch,
                        int handbrake, int gearUp, int gearDown,
@@ -135,8 +136,6 @@ public sealed class WinUHidDeviceManager : IDisposable
             // 三个踏板独立通道（互不干扰，允许油离/跟趾配合）
             // 油门 → 右扳机，刹车 → 左扳机
             int targetThrottle = throttle * TRIGGER_MAX / 100;
-            // 自动挡：按住 D/R 时持续满油门（松开即回踏板值）
-            if (autoDr == 1 || autoDr == -1) targetThrottle = TRIGGER_MAX;
             int targetBrake = brake * TRIGGER_MAX / 100;
             _lastThrottle = Smooth(_lastThrottle, targetThrottle);
             _lastBrake = Smooth(_lastBrake, targetBrake);
@@ -166,26 +165,30 @@ public sealed class WinUHidDeviceManager : IDisposable
                 BatteryLevel = 0xFF,
             };
 
+            // 升降档（序列挡）：RB=升档，LB=降档（行业标准拨片布局）
             if (_gearUpTimer > 0) report.ButtonsMain |= 0x20;   // RB = 升档
             if (_gearDownTimer > 0) report.ButtonsMain |= 0x10; // LB = 降档
-            if (handbrake > 0) report.ButtonsMain |= 0x02;      // B = 手刹
 
-            // 自动挡 D/R：Y = D（前进）、X = R（倒车）
-            if (autoDr == 1) report.ButtonsMain |= 0x08;        // Y = D
+            // 手刹（独立按钮，不与挡位冲突）
+            if (handbrake > 0) report.ButtonsMain |= 0x80;      // Menu = 手刹
+
+            // 自动挡（gearMode=1）：D=A（前进），R=X（倒车），保持式
+            if (autoDr == 1) report.ButtonsMain |= 0x01;        // A = D
             else if (autoDr == -1) report.ButtonsMain |= 0x04;  // X = R
 
-            // 手动挡挡位（-1=R, 1..6），5档(3)/6档(4) 共用（Xbox 按钮位有限，最多映射到 6 档）
+            // 手动挡（gearMode=3/4）：行业 H 挡标准顺序
+            // R=Back, 1=LB, 2=RB, 3=A, 4=B, 5=X, 6=Y
             if (gearMode == 3 || gearMode == 4)
             {
                 switch (gearValue)
                 {
                     case -1: report.ButtonsMain |= 0x40; break; // Back = R
-                    case 1: report.ButtonsMain |= 0x01; break;  // A = 1档
-                    case 2: report.ButtonsMain |= 0x04; break;  // X = 2档
-                    case 3: report.ButtonsMain |= 0x08; break;  // Y = 3档
-                    case 4: report.ButtonsMain |= 0x10; break;  // LB = 4档
-                    case 5: report.ButtonsMain |= 0x20; break;  // RB = 5档
-                    case 6: report.ButtonsMain |= 0x80; break;  // Menu = 6档
+                    case 1: report.ButtonsMain |= 0x10; break;  // LB = 1档
+                    case 2: report.ButtonsMain |= 0x20; break;  // RB = 2档
+                    case 3: report.ButtonsMain |= 0x01; break;  // A = 3档
+                    case 4: report.ButtonsMain |= 0x02; break;  // B = 4档
+                    case 5: report.ButtonsMain |= 0x04; break;  // X = 5档
+                    case 6: report.ButtonsMain |= 0x08; break;  // Y = 6档
                 }
             }
 
