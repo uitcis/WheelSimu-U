@@ -139,6 +139,11 @@ namespace WheelSimu
         private volatile bool mAutoReconnect = true;
         private volatile bool mConnecting;   // 连接防重入（连接在后台线程执行，不阻塞 UI）
 
+        // ==================== 蓝牙模式 (SPP) ====================
+        private BluetoothSppClient _btClient;
+        private string _btDeviceAddress;     // 上次连接的 PC 蓝牙 MAC
+        private const int REQ_BT_PERMISSION = 1001;
+
         //vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv全局参数声明vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
 
 
@@ -173,6 +178,7 @@ namespace WheelSimu
                 _layoutMode = prefs.GetInt("LayoutMode", 0);
                 _gearMode = prefs.GetInt("GearMode", 0);
                 if (_gearMode < 0 || _gearMode > 4) _gearMode = 0;
+                _btDeviceAddress = prefs.GetString("LastBT", "");   // 蓝牙模式上次连接的 PC
                 SetContentView(_layoutMode == 0 ? Resource.Layout.activity_main : Resource.Layout.activity_wheel);
 
 
@@ -335,6 +341,14 @@ namespace WheelSimu
                 {
                     RunOnUiThread(() => IPText.Text = mDiscoveredServer);
                     LogToUI($"发现服务器: {mDiscoveredServer}");
+                }
+
+                // 蓝牙模式：不走 IP/UDP 发现，需先选已配对设备
+                if (mConnectMode == 2)
+                {
+                    LogToUI("蓝牙模式：请先与 PC 配对，再点连接选择设备");
+                    mDiscoveryInitialDone = true;
+                    return;
                 }
 
                 // 只要有已保存的 IP 或者发现了服务器就自动连接
@@ -568,7 +582,13 @@ namespace WheelSimu
                         int len = BuildSendDataToBuffer(angle, _latestThrottle, _latestBrake, _latestClutch,
                             _latestGearUp, _latestGearDn, _latestGear, _latestSet, _latestSetSR, _latestHb,
                             _latestGearMode, _latestDr, _latestGearValue);
-                        try { Sct[1]?.Send(_sendBuf, len, SocketFlags.None); }
+                        try
+                        {
+                            if (mConnectMode == 2)
+                                _btClient?.Send(_sendBuf, len);   // 蓝牙 SPP
+                            else
+                                Sct[1]?.Send(_sendBuf, len, SocketFlags.None);
+                        }
                         catch { IsConnected = false; OnConnectionLost(); }
                     }
                 });
@@ -680,6 +700,160 @@ namespace WheelSimu
             mConnectMode = (mConnectMode + 1) % 3;
             string[] modes = { "TCP", "UDP", "蓝牙" };
             btnNetMode.Text = modes[mConnectMode];
+
+            // 切换通道：断开旧连接，避免两种通道同时发数据
+            IsConnected = false;
+            if (mConnectMode == 2)
+            {
+                try { Sct[1]?.Close(); } catch { }
+                try { steeringWheel.Connected = false; steeringWheel.CenterText = ""; } catch { }
+
+                if (!BluetoothSppClient.IsAvailable(this))
+                    LogToUI("本机无蓝牙适配器，蓝牙模式不可用");
+                else if (!BluetoothSppClient.IsEnabled(this))
+                    LogToUI("请先开启蓝牙，并在系统设置中与 PC 配对");
+                else
+                    LogToUI("蓝牙模式：点「重连」选择已配对的 PC");
+            }
+            else
+            {
+                try { _btClient?.Close(); } catch { }
+            }
+        }
+
+        // ==================== 蓝牙模式 (SPP) ====================
+        private bool HasBluetoothPermission()
+        {
+            // Android 12 (API 31) 起连接/读取已配对设备需要 BLUETOOTH_CONNECT
+            // 用 OperatingSystem 判断（而非 Build.VERSION.SdkInt），平台分析器才能识别为守卫
+            if (!OperatingSystem.IsAndroidVersionAtLeast(31)) return true;
+            try { return CheckSelfPermission(Android.Manifest.Permission.BluetoothConnect) == Android.Content.PM.Permission.Granted; }
+            catch { return false; }
+        }
+
+        private void RequestBluetoothPermission()
+        {
+            if (!OperatingSystem.IsAndroidVersionAtLeast(31)) { ShowBluetoothDevicePicker(); return; }
+            RequestPermissions(new[] { Android.Manifest.Permission.BluetoothConnect }, REQ_BT_PERMISSION);
+        }
+
+        public override void OnRequestPermissionsResult(int requestCode, string[] permissions, Android.Content.PM.Permission[] grantResults)
+        {
+            base.OnRequestPermissionsResult(requestCode, permissions, grantResults);
+
+            if (requestCode == REQ_BT_PERMISSION)
+            {
+                if (grantResults != null && grantResults.Length > 0 &&
+                    grantResults[0] == Android.Content.PM.Permission.Granted)
+                    ShowBluetoothDevicePicker();
+                else
+                    LogToUI("未授予蓝牙权限，无法使用蓝牙模式");
+            }
+        }
+
+        /// <summary>蓝牙连接入口：权限 → 选设备 → 后台连接</summary>
+        private void ConnectBluetoothFlow()
+        {
+            if (!BluetoothSppClient.IsAvailable(this)) { LogToUI("本机无蓝牙适配器"); RunOnUiThread(() => btnConnect.Enabled = true); return; }
+            if (!BluetoothSppClient.IsEnabled(this)) { LogToUI("请先开启蓝牙并与 PC 配对"); RunOnUiThread(() => btnConnect.Enabled = true); return; }
+
+            if (!HasBluetoothPermission()) { RunOnUiThread(RequestBluetoothPermission); return; }
+
+            RunOnUiThread(ShowBluetoothDevicePicker);
+        }
+
+        /// <summary>自动重连：已有上次设备地址时直接连，否则弹选择器</summary>
+        private void ConnectBluetoothAuto()
+        {
+            if (string.IsNullOrEmpty(_btDeviceAddress)) { ConnectBluetoothFlow(); return; }
+            DoBluetoothConnect(_btDeviceAddress);
+        }
+
+        private void ShowBluetoothDevicePicker()
+        {
+            var devices = BluetoothSppClient.GetPairedDevices(this);
+            if (devices.Count == 0)
+            {
+                LogToUI("没有已配对设备，请先在系统蓝牙设置中与 PC 配对");
+                RunOnUiThread(() => btnConnect.Enabled = true);
+                return;
+            }
+
+            var names = new string[devices.Count];
+            for (int i = 0; i < devices.Count; i++) names[i] = devices[i].ToString();
+
+            try
+            {
+                new Android.App.AlertDialog.Builder(this)
+                    .SetTitle("选择 PC（已配对）")
+                    .SetItems(names, (s, e) =>
+                    {
+                        var dev = devices[e.Which];
+                        _btDeviceAddress = dev.Address;
+                        try
+                        {
+                            GetSharedPreferences("WheelSimuPrefs", FileCreationMode.Private)
+                                .Edit().PutString("LastBT", dev.Address).Commit();
+                        }
+                        catch { }
+
+                        LogToUI($"正在连接 {dev.Name} ...");
+                        ThreadPool.QueueUserWorkItem(_ => DoBluetoothConnect(dev.Address));
+                    })
+                    .SetNegativeButton("取消", (s, e) => { try { btnConnect.Enabled = true; } catch { } })
+                    .Show();
+            }
+            catch (Exception ex)
+            {
+                LogToUI("设备选择失败: " + ex.Message);
+            }
+        }
+
+        private void DoBluetoothConnect(string address)
+        {
+            if (mConnecting) return;
+            mConnecting = true;
+            RunOnUiThread(() => btnConnect.Enabled = false);
+
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try
+                {
+                    try { _btClient?.Close(); } catch { }
+                    var client = new BluetoothSppClient();
+                    client.Connect(this, address);
+                    _btClient = client;
+
+                    IsConnected = true;
+                    CancelReconnect();
+                    RunOnUiThread(() =>
+                    {
+                        textView3.Text = "蓝牙已连接";
+                        textView2.Text = "→ BT " + address;
+                        steeringWheel.Connected = true;
+                        steeringWheel.CenterText = "蓝牙";
+                        btnConnect.Text = "重连: 开";
+                        btnConnect.Enabled = true;
+                    });
+                }
+                catch (Exception ex)
+                {
+                    IsConnected = false;
+                    RunOnUiThread(() =>
+                    {
+                        textView3.Text = "蓝牙连接失败: " + ex.Message;
+                        steeringWheel.Connected = false;
+                        steeringWheel.CenterText = "";
+                        btnConnect.Enabled = true;
+                    });
+
+                    if (mAutoReconnect) ScheduleReconnect();
+                }
+                finally
+                {
+                    mConnecting = false;
+                }
+            });
         }
 
         /// <summary>发起连接（不切换自动重连开关），失败时按自动重连策略处理。
@@ -731,14 +905,19 @@ namespace WheelSimu
                 mAutoReconnect = true;
                 RunOnUiThread(() => btnConnect.Text = "重连: 开");
                 RunOnUiThread(() => textView2.Text = "自动重连: 开");
-                ConnectNow();
+
+                if (mConnectMode == 2)
+                    ConnectBluetoothAuto();   // 蓝牙：选设备 / 重连上次设备
+                else
+                    ConnectNow();
             }
             else
             {
                 // === 关闭自动重连：断开连接并停止重连 ===
                 mAutoReconnect = false;
                 CancelReconnect();
-                Sct[1]?.Close();
+                try { Sct[1]?.Close(); } catch { }
+                try { _btClient?.Close(); } catch { }
                 IsConnected = false;
                 RunOnUiThread(() => btnConnect.Text = "重连: 关");
                 RunOnUiThread(() => textView3.Text = "已断开 (自动重连: 关)");
@@ -750,6 +929,9 @@ namespace WheelSimu
 
         private void DoConnect(string rawText)
         {
+            // 蓝牙模式不走 TCP/UDP，连接由 DoBluetoothConnect 负责
+            if (mConnectMode == 2) return;
+
             // 获取手机本机WiFi IP (多种方式兜底)
             string localIp = null;
             try
@@ -992,6 +1174,8 @@ namespace WheelSimu
             StopSensors();
             mSensorManager?.UnregisterListener(this);
 
+            try { _btClient?.Close(); } catch { }
+
             foreach (var socket in Sct)
             {
                 if (socket != null && socket.Connected)
@@ -1131,7 +1315,12 @@ namespace WheelSimu
                 // 在后台线程执行重连（ConnectNow 内部自行启动后台任务，不再阻塞 UI）
                 if (!IsConnected && mAutoReconnect)
                 {
-                    try { ConnectNow(); } catch { }
+                    try
+                    {
+                        if (mConnectMode == 2) ConnectBluetoothAuto();
+                        else ConnectNow();
+                    }
+                    catch { }
                 }
             }, null, 3000, Timeout.Infinite);
         }

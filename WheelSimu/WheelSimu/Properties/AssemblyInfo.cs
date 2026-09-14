@@ -1,7 +1,15 @@
 ﻿using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using Android.App;
+
+// 本工程设置了 GenerateAssemblyInfo=false（因为下面手写了 AssemblyVersion 等），
+// 副作用是 SDK 不再自动生成 [assembly: SupportedOSPlatform("android23.0")]。
+// 缺少该特性时，平台兼容性分析器会认为本程序集"可在所有平台运行"，
+// 于是对每一处 Android API 调用都报 CA1416 警告（原本约 700+ 条，掩盖真实问题）。
+// 这里手工补回，与 csproj 的 <SupportedOSPlatformVersion>23</SupportedOSPlatformVersion> 一致。
+[assembly: SupportedOSPlatform("android23.0")]
 
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information

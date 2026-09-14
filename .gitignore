@@ -10,6 +10,8 @@ obj/
 
 # 内嵌到 EXE 的 UMDF 驱动资源必须入库（WinUHidDriver.dll 是驱动核心）
 !WheelSimuServer/Driver/*.dll
+# WinUHid 已编译依赖随库发布，避免每台机器二次编译
+!WheelSimuServer/Libs/*.dll
 # *.apk  (Release 目录下的发布文件保留)
 
 # IDE
@@ -40,3 +42,6 @@ WheelSimuServer/WheelSimuServer.csproj.user
 # 发行产物不入库（含 68MB 大文件 exe/apk，本地 Release/ 保留）
 Release/
 Release.zip
+
+# 部署脚本记住的无线调试地址（每台机器不同）
+tools/.last-wireless

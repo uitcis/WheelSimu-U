@@ -2,7 +2,8 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <!-- 10.0.19041：启用 WinRT 蓝牙 API (Windows.Devices.Bluetooth.Rfcomm)，用于蓝牙 SPP 模式 -->
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -20,12 +21,12 @@
   <ItemGroup>
     <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
     <!-- WinUHid (lurebat) 已编译产物，2026-08-16 -->
-    <Content Include="bin\Release\net8.0-windows\win-x64\WinUHid.dll">
+    <Content Include="Libs\WinUHid.dll">
       <Link>WinUHid.dll</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
-    <Content Include="bin\Release\net8.0-windows\win-x64\WinUHidDevs.dll">
+    <Content Include="Libs\WinUHidDevs.dll">
       <Link>WinUHidDevs.dll</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>

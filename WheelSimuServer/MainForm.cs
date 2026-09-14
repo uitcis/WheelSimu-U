@@ -25,6 +25,9 @@ public partial class MainForm : Form
     readonly WinUHidWheelDeviceManager wheelMgr = new();
 
     CancellationTokenSource? _cts;
+    BluetoothSppServer? _btServer;   // 蓝牙 SPP (RFCOMM) 服务端
+    string _ipText = "";             // 状态栏左半段（局域网信息）
+    string _btStatusText = "未启动";  // 状态栏右半段（蓝牙状态）
     bool _isExiting;
     bool _restoringFromTray;    // 从托盘恢复窗口期间，跳过 Resize 自动隐藏
 
@@ -378,6 +381,18 @@ public partial class MainForm : Form
         // 真正退出
         _cts?.Cancel();
 
+        // 停止蓝牙广播
+        try
+        {
+            _btServer?.Dispose();
+            _btServer = null;
+            Log("蓝牙 SPP 服务已停止");
+        }
+        catch (Exception ex)
+        {
+            Log($"停止蓝牙服务异常: {ex.Message}");
+        }
+
         // 释放 WinUHid 虚拟设备
         try
         {
@@ -446,7 +461,10 @@ public partial class MainForm : Form
             return;
         }
 
-        if (ipText != null) lblIP.Text = ipText;
+        if (ipText != null) _ipText = ipText;
+        lblIP.Text = string.IsNullOrEmpty(_ipText)
+            ? $"蓝牙: {_btStatusText}"
+            : $"{_ipText} | 蓝牙: {_btStatusText}";
         if (trayText != null) trayIcon.Text = "WheelSimu Server - " + trayText;
 
         lblClient.Text = $"客户端: {clientCount}";
@@ -474,10 +492,42 @@ public partial class MainForm : Form
         }
     }
 
+    // ==================== 蓝牙 SPP (RFCOMM) 服务器 ====================
+    /// <summary>
+    /// 启动蓝牙串口服务。手机需先与本机配对，再由手机端主动连接；
+    /// 无蓝牙适配器或系统拒绝时不致命，仅记录一行日志，TCP 通道照常工作。
+    /// </summary>
+    async Task StartBluetoothServer(CancellationToken ct)
+    {
+        var bt = new BluetoothSppServer();
+        bt.ClientConnected += conn =>
+        {
+            Interlocked.Increment(ref clientCount);
+            UpdateStatusUI();
+            _ = HandleBluetoothClient(conn, ct);
+        };
+
+        if (await bt.StartAsync())
+        {
+            _btServer = bt;
+            _btStatusText = bt.StatusText;
+            Log($"蓝牙 SPP 服务已启动: {BluetoothSppServer.ServiceDisplayName} (手机配对后即可连接)");
+        }
+        else
+        {
+            _btStatusText = bt.StatusText;
+            Log($"蓝牙未启用: {bt.StatusText}（不影响 TCP/UDP 模式）");
+            bt.Dispose();
+        }
+
+        UpdateStatusUI();
+    }
+
     // ==================== TCP 服务器 ====================
     async Task RunServer(CancellationToken ct)
     {
         _ = BroadcastDiscovery(ct);
+        _ = StartBluetoothServer(ct);
 
         TcpListener? listener = null;
         try
@@ -517,36 +567,7 @@ public partial class MainForm : Form
             client.NoDelay = true; // 禁用 Nagle，降低延迟
             using var stream = client.GetStream();
             stream.ReadTimeout = 3000;
-            var buffer = new byte[512];
-            var leftover = "";
-
-            while (!ct.IsCancellationRequested && client.Connected)
-            {
-                int count;
-                try
-                {
-                    count = await stream.ReadAsync(buffer, 0, buffer.Length, ct);
-                    if (count == 0) break;
-                }
-                catch (IOException) { break; }
-                catch (OperationCanceledException) { break; }
-
-                string raw = Encoding.UTF8.GetString(buffer, 0, count);
-                leftover += raw;
-
-                while (true)
-                {
-                    int atIdx = leftover.IndexOf('@');
-                    if (atIdx < 0) break;
-
-                    string msg = leftover.Substring(0, atIdx);
-                    leftover = leftover.Substring(atIdx + 1);
-                    ProcessMessage(msg);
-                    // 客户端不处理 ACK，已移除（节省 100 次/秒无用的网络写入）
-                }
-
-                if (leftover.Length > 4096) leftover = "";
-            }
+            await ProcessStream(stream, remote, ct);
         }
         catch (Exception ex)
         {
@@ -557,6 +578,63 @@ public partial class MainForm : Form
             Interlocked.Decrement(ref clientCount);
             UpdateStatusUI();
             Log($"[断开] {remote}");
+        }
+    }
+
+    async Task HandleBluetoothClient(BluetoothSppConnection conn, CancellationToken ct)
+    {
+        var remote = "BT " + conn.RemoteName;
+        Log($"[蓝牙连接] {remote}");
+
+        try
+        {
+            await ProcessStream(conn.ReadStream, remote, ct);
+        }
+        catch (Exception ex)
+        {
+            Log($"[蓝牙错误] {remote}: {ex.Message}");
+        }
+        finally
+        {
+            conn.Dispose();
+            Interlocked.Decrement(ref clientCount);
+            UpdateStatusUI();
+            Log($"[蓝牙断开] {remote}");
+        }
+    }
+
+    /// <summary>通用接收循环：TCP 与蓝牙共用，按 '@' 切帧后交给 ProcessMessage</summary>
+    async Task ProcessStream(Stream stream, string remote, CancellationToken ct)
+    {
+        var buffer = new byte[512];
+        var leftover = "";
+
+        while (!ct.IsCancellationRequested)
+        {
+            int count;
+            try
+            {
+                count = await stream.ReadAsync(buffer, 0, buffer.Length, ct);
+                if (count == 0) break;
+            }
+            catch (IOException) { break; }
+            catch (OperationCanceledException) { break; }
+            catch (ObjectDisposedException) { break; }
+
+            leftover += Encoding.UTF8.GetString(buffer, 0, count);
+
+            while (true)
+            {
+                int atIdx = leftover.IndexOf('@');
+                if (atIdx < 0) break;
+
+                string msg = leftover.Substring(0, atIdx);
+                leftover = leftover.Substring(atIdx + 1);
+                ProcessMessage(msg);
+                // 客户端不处理 ACK，已移除（节省 100 次/秒无用的网络写入）
+            }
+
+            if (leftover.Length > 4096) leftover = "";
         }
     }
 
