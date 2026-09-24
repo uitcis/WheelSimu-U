@@ -65,8 +65,27 @@ namespace WheelSimu
         Button HandbrakeSwitch;
         SteeringWheelView steeringWheel;
 
-        /// <summary>连接模式: 0=TCP, 1=UDP, 2=蓝牙</summary>
+        /// <summary>连接模式: 0=TCP, 1=UDP, 2=蓝牙, 3=USB(adb 端口转发)</summary>
         private int mConnectMode = 0;
+
+        private const int MODE_TCP = 0;
+        private const int MODE_UDP = 1;
+        private const int MODE_BT = 2;
+        private const int MODE_USB = 3;
+        private const int MODE_COUNT = 4;
+
+        /// <summary>各模式按钮/状态栏显示名，顺序必须与 MODE_* 一致</summary>
+        private static readonly string[] ModeLabels = { "TCP", "UDP", "蓝牙", "USB" };
+
+        /// <summary>
+        /// USB 有线模式的固定端点。PC 端服务端会自动执行
+        /// <c>adb reverse tcp:5050 tcp:5050</c>，把 PC 的 5050 反向映射到手机本机，
+        /// 所以手机端连 127.0.0.1 就等于连到 PC。
+        /// </summary>
+        private const string USB_ENDPOINT = "127.0.0.1:5050";
+
+        /// <summary>切进 USB 模式前的 IP 输入内容，切出时还原</summary>
+        private string _ipBeforeUsb;
 
         /// <summary>布局模式: 0=赛车HUD, 1=模拟方向盘</summary>
         private int _layoutMode = 0;
@@ -202,6 +221,17 @@ namespace WheelSimu
             btnConnect = FindViewById<Button>(Resource.Id.Connect);
             btnConnect.Text = "重连: 开";  // 初始状态：自动重连开启
             btnNetMode = FindViewById<Button>(Resource.Id.btnNetMode);
+
+            // 恢复上次的连接模式（0=TCP 1=UDP 2=蓝牙 3=USB）
+            mConnectMode = prefs.GetInt("ConnectMode", MODE_TCP);
+            if (mConnectMode < 0 || mConnectMode >= MODE_COUNT) mConnectMode = MODE_TCP;
+            btnNetMode.Text = ModeLabels[mConnectMode];
+            if (mConnectMode == MODE_USB)
+            {
+                _ipBeforeUsb = IPText.Text;
+                IPText.Text = USB_ENDPOINT;   // USB 端点固定，界面直接显示实际连接目标
+            }
+
             btnLayoutSwitch = FindViewById<Button>(Resource.Id.btnLayoutSwitch);
             btnSet = FindViewById<Button>(Resource.Id.btnSet);
             btnReset = FindViewById<Button>(Resource.Id.btnReset);
@@ -288,8 +318,9 @@ namespace WheelSimu
                 _layoutMode = _layoutMode == 0 ? 1 : 0;
                 var p = GetSharedPreferences("WheelSimuPrefs", FileCreationMode.Private);
                 p.Edit().PutInt("LayoutMode", _layoutMode).Commit();
-                // 保存当前IP（Recreate 会重新读取）
-                p.Edit().PutString("LastIP", IPText.Text).Commit();
+                // 保存当前IP（Recreate 会重新读取）；USB 模式下 IPText 是固定回环地址，不覆盖
+                if (mConnectMode != MODE_USB)
+                    p.Edit().PutString("LastIP", IPText.Text).Commit();
                 Recreate();
             };
 
@@ -328,6 +359,16 @@ namespace WheelSimu
             ThreadPool.QueueUserWorkItem(_ =>
             {
                 Thread.Sleep(1500);
+
+                // USB 模式：端点固定，不需要等 UDP 发现，直接连本机转发端口
+                if (mConnectMode == MODE_USB)
+                {
+                    mDiscoveryInitialDone = true;
+                    LogToUI($"USB 模式：连接 {USB_ENDPOINT} ...（需数据线连接 + 手机开 USB 调试）");
+                    ConnectNow();
+                    return;
+                }
+
                 // 等待 UDP 发现 3 秒
                 var waited = 0;
                 while (mDiscoveredServer == null && waited < 3000)
@@ -344,7 +385,7 @@ namespace WheelSimu
                 }
 
                 // 蓝牙模式：不走 IP/UDP 发现，需先选已配对设备
-                if (mConnectMode == 2)
+                if (mConnectMode == MODE_BT)
                 {
                     LogToUI("蓝牙模式：请先与 PC 配对，再点连接选择设备");
                     mDiscoveryInitialDone = true;
@@ -584,7 +625,7 @@ namespace WheelSimu
                             _latestGearMode, _latestDr, _latestGearValue);
                         try
                         {
-                            if (mConnectMode == 2)
+                            if (mConnectMode == MODE_BT)
                                 _btClient?.Send(_sendBuf, len);   // 蓝牙 SPP
                             else
                                 Sct[1]?.Send(_sendBuf, len, SocketFlags.None);
@@ -696,18 +737,30 @@ namespace WheelSimu
 
         private void BtnNetMode_OnClick()
         {
-            // 循环切换: TCP → UDP → 蓝牙 → TCP
-            mConnectMode = (mConnectMode + 1) % 3;
-            string[] modes = { "TCP", "UDP", "蓝牙" };
-            btnNetMode.Text = modes[mConnectMode];
+            // 循环切换: TCP → UDP → 蓝牙 → USB → TCP
+            int prev = mConnectMode;
+            mConnectMode = (mConnectMode + 1) % MODE_COUNT;
+            btnNetMode.Text = ModeLabels[mConnectMode];
 
-            // 切换通道：断开旧连接，避免两种通道同时发数据
-            IsConnected = false;
-            if (mConnectMode == 2)
+            // USB 模式端点固定为 127.0.0.1，切进/切出时同步 IP 输入框内容
+            if (prev == MODE_USB)
+                IPText.Text = _ipBeforeUsb ?? IPText.Text;
+            if (mConnectMode == MODE_USB)
             {
-                try { Sct[1]?.Close(); } catch { }
-                try { steeringWheel.Connected = false; steeringWheel.CenterText = ""; } catch { }
+                _ipBeforeUsb = IPText.Text;
+                IPText.Text = USB_ENDPOINT;
+            }
 
+            // 切换通道：关掉旧通道的连接，避免两条通道同时发数据
+            // （Sct[1] 是 TCP/UDP 的 socket，_btClient 是蓝牙的，两者都要关，
+            //   否则旧 socket 会在 ConnectNow 建新连接时被丢弃成泄漏）
+            IsConnected = false;
+            try { Sct[1]?.Close(); } catch { }
+            try { _btClient?.Close(); } catch { }
+            try { steeringWheel.Connected = false; steeringWheel.CenterText = ""; } catch { }
+
+            if (mConnectMode == MODE_BT)
+            {
                 if (!BluetoothSppClient.IsAvailable(this))
                     LogToUI("本机无蓝牙适配器，蓝牙模式不可用");
                 else if (!BluetoothSppClient.IsEnabled(this))
@@ -715,10 +768,25 @@ namespace WheelSimu
                 else
                     LogToUI("蓝牙模式：点「重连」选择已配对的 PC");
             }
-            else
+            else if (mConnectMode == MODE_USB)
             {
-                try { _btClient?.Close(); } catch { }
+                LogToUI("USB 模式：数据线连 PC + 手机开「USB 调试」，PC 端自动建立转发");
             }
+
+            // 记住模式，下次启动直接沿用
+            try
+            {
+                GetSharedPreferences("WheelSimuPrefs", FileCreationMode.Private)
+                    .Edit().PutInt("ConnectMode", mConnectMode).Commit();
+            }
+            catch { }
+
+            // 切换模式后立刻按新通道重连。
+            // 否则用户切完模式界面毫无反应，还得去点「重连」按钮 —— 而那个按钮此时是"开"状态，
+            // 点一下反而把自动重连关掉了，体验很反直觉。
+            // 蓝牙例外：连它需要先选设备，交给用户点「重连」决定，避免每次切模式都弹选择框。
+            if (mAutoReconnect && mConnectMode != MODE_BT)
+                ConnectNow();
         }
 
         // ==================== 蓝牙模式 (SPP) ====================
@@ -860,7 +928,11 @@ namespace WheelSimu
         /// 连接在后台线程执行，避免阻塞 UI 线程（否则自动重连期间滑块/触摸会卡死）</summary>
         private void ConnectNow(string ipOverride = null)
         {
-            string ip = ipOverride ?? IPText.Text?.Trim();
+            // USB 模式端点固定为 127.0.0.1：PC 端的 adb reverse 已把 PC:5050 映射到手机本机，
+            // 这里必须忽略 IP 输入框与 UDP 发现到的局域网地址，否则会绕开 USB 走 WiFi。
+            string ip = mConnectMode == MODE_USB
+                ? USB_ENDPOINT
+                : (ipOverride ?? IPText.Text?.Trim());
             if (string.IsNullOrEmpty(ip))
             {
                 RunOnUiThread(() => textView3.Text = "等待服务器广播...");
@@ -906,7 +978,7 @@ namespace WheelSimu
                 RunOnUiThread(() => btnConnect.Text = "重连: 开");
                 RunOnUiThread(() => textView2.Text = "自动重连: 开");
 
-                if (mConnectMode == 2)
+                if (mConnectMode == MODE_BT)
                     ConnectBluetoothAuto();   // 蓝牙：选设备 / 重连上次设备
                 else
                     ConnectNow();
@@ -930,7 +1002,7 @@ namespace WheelSimu
         private void DoConnect(string rawText)
         {
             // 蓝牙模式不走 TCP/UDP，连接由 DoBluetoothConnect 负责
-            if (mConnectMode == 2) return;
+            if (mConnectMode == MODE_BT) return;
 
             // 获取手机本机WiFi IP (多种方式兜底)
             string localIp = null;
@@ -968,19 +1040,23 @@ namespace WheelSimu
                 IPData[0].Port = Core.CommonCode.GetPort(TryTimes);
             }
 
-            // 保存IP
+            // 保存IP（USB 模式的 IPText 是固定回环地址，不该覆盖掉局域网 IP）
             var prefs = GetSharedPreferences("WheelSimuPrefs", FileCreationMode.Private);
             var editor = prefs.Edit();
-            editor.PutString("LastIP", IPText.Text);
+            if (mConnectMode != MODE_USB)
+                editor.PutString("LastIP", IPText.Text);
+            editor.Commit();
+
+            // 保存模式，下次启动直接沿用
+            editor.PutInt("ConnectMode", mConnectMode);
             editor.Commit();
 
             RunOnUiThread(() => textView4.Text = "Connecting ...");
-            string[] modeLabels = { "TCP", "UDP", "蓝牙" };
-            RunOnUiThread(() => textView5.Text = modeLabels[mConnectMode]);
+            RunOnUiThread(() => textView5.Text = ModeLabels[mConnectMode]);
 
-            if (mConnectMode == 2)
+            if (mConnectMode == MODE_BT)
                 Sct[1] = new Socket(AddressFamily.InterNetwork, SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp);
-            else if (mConnectMode == 1)
+            else if (mConnectMode == MODE_UDP)
                 Sct[1] = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, System.Net.Sockets.ProtocolType.Udp);
             else
                 Sct[1] = new Socket(AddressFamily.InterNetwork, SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp);
@@ -992,7 +1068,7 @@ namespace WheelSimu
             IPEndPoint RemoteEndPoint = new IPEndPoint(IPAddress.Parse(IPData[0].IP), IPData[0].Port);
             RunOnUiThread(() => textView2.Text = $"→ {IPData[0].IP}:{IPData[0].Port}");
 
-            if (mConnectMode == 1)
+            if (mConnectMode == MODE_UDP)
             {
                 Sct[1].Bind(new IPEndPoint(IPAddress.Any, 5050));
                 Sct[1].Connect(RemoteEndPoint);
@@ -1237,7 +1313,8 @@ namespace WheelSimu
                                             });
                                         }
                                         // 之后发现的服务器：自动连接（用于服务器切换场景）
-                                        else if (!IsConnected && mAutoReconnect)
+                                        // USB 模式忽略 —— 它的端点是固定的 127.0.0.1，不能被局域网地址带跑
+                                        else if (!IsConnected && mAutoReconnect && mConnectMode != MODE_USB)
                                         {
                                             RunOnUiThread(() =>
                                             {
@@ -1317,7 +1394,7 @@ namespace WheelSimu
                 {
                     try
                     {
-                        if (mConnectMode == 2) ConnectBluetoothAuto();
+                        if (mConnectMode == MODE_BT) ConnectBluetoothAuto();
                         else ConnectNow();
                     }
                     catch { }

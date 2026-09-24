@@ -26,8 +26,10 @@ public partial class MainForm : Form
 
     CancellationTokenSource? _cts;
     BluetoothSppServer? _btServer;   // 蓝牙 SPP (RFCOMM) 服务端
+    UsbAdbLink? _usbLink;            // USB 有线链路（adb 端口转发）
     string _ipText = "";             // 状态栏左半段（局域网信息）
-    string _btStatusText = "未启动";  // 状态栏右半段（蓝牙状态）
+    string _btStatusText = "未启动";  // 状态栏中段（蓝牙状态）
+    string _usbStatusText = "未启动"; // 状态栏右段（USB 状态）
     bool _isExiting;
     bool _restoringFromTray;    // 从托盘恢复窗口期间，跳过 Resize 自动隐藏
 
@@ -393,6 +395,17 @@ public partial class MainForm : Form
             Log($"停止蓝牙服务异常: {ex.Message}");
         }
 
+        // 停止 USB 链路监控（已建立的转发保留，服务端重启后手机可立即重连）
+        try
+        {
+            _usbLink?.Dispose();
+            _usbLink = null;
+        }
+        catch (Exception ex)
+        {
+            Log($"停止 USB 链路异常: {ex.Message}");
+        }
+
         // 释放 WinUHid 虚拟设备
         try
         {
@@ -462,9 +475,11 @@ public partial class MainForm : Form
         }
 
         if (ipText != null) _ipText = ipText;
+        string btPart = $"蓝牙: {_btStatusText}";
+        string usbPart = $"USB: {_usbStatusText}";
         lblIP.Text = string.IsNullOrEmpty(_ipText)
-            ? $"蓝牙: {_btStatusText}"
-            : $"{_ipText} | 蓝牙: {_btStatusText}";
+            ? $"{btPart} | {usbPart}"
+            : $"{_ipText} | {btPart} | {usbPart}";
         if (trayText != null) trayIcon.Text = "WheelSimu Server - " + trayText;
 
         lblClient.Text = $"客户端: {clientCount}";
@@ -523,11 +538,35 @@ public partial class MainForm : Form
         UpdateStatusUI();
     }
 
+    // ==================== USB 有线链路（adb 端口转发） ====================
+    /// <summary>
+    /// 启动 USB 链路监控：找到 adb 且手机已插线授权时，自动执行
+    /// <c>adb reverse tcp:5050 tcp:5050</c>，手机端选 USB 模式连 127.0.0.1:5050 即可。
+    /// 没 adb / 没插线 / 没授权都只记状态，不影响 TCP/UDP/蓝牙。
+    /// </summary>
+    void StartUsbLink(CancellationToken ct)
+    {
+        var usb = new UsbAdbLink();
+        usb.StatusChanged += () =>
+        {
+            _usbStatusText = usb.StatusText;
+            UpdateStatusUI();
+        };
+        usb.Log += msg => Log(msg);
+        usb.Start();
+        _usbLink = usb;
+
+        _usbStatusText = usb.StatusText;
+        UpdateStatusUI();
+        Log("USB 链路监控已启动（手机开 USB 调试并插线后自动建立转发）");
+    }
+
     // ==================== TCP 服务器 ====================
     async Task RunServer(CancellationToken ct)
     {
         _ = BroadcastDiscovery(ct);
         _ = StartBluetoothServer(ct);
+        StartUsbLink(ct);
 
         TcpListener? listener = null;
         try
