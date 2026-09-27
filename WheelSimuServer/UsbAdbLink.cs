@@ -8,9 +8,9 @@ using System.Threading.Tasks;
 namespace WheelSimuServer;
 
 /// <summary>
-/// USB 有线链路：调用 adb 把 PC 的 5050 端口"反向"映射到手机本机端口
-/// （<c>adb reverse tcp:5050 tcp:5050</c>）。
-/// 手机端 App 连 <c>127.0.0.1:5050</c> 即可经 USB 数据线直达本机服务端，完全不依赖 WiFi。
+/// USB 有线链路：调用 adb 把 PC 的 25050 端口"反向"映射到手机本机端口
+/// （<c>adb reverse tcp:25050 tcp:25050</c>）。
+/// 手机端 App 连 <c>127.0.0.1:25050</c> 即可经 USB 数据线直达本机服务端，完全不依赖 WiFi。
 ///
 /// 前置条件：手机开启「USB 调试」并在弹窗中授权本机；PC 上能找到 adb.exe。
 /// 任一条件不满足都只是记录状态，绝不影响 TCP / UDP / 蓝牙 通道。
@@ -21,7 +21,7 @@ namespace WheelSimuServer;
 sealed class UsbAdbLink : IDisposable
 {
     /// <summary>转发端口，与 TCP 服务端口保持一致</summary>
-    public const int TunnelPort = 5050;
+    public const int TunnelPort = 25050;
 
     /// <summary>轮询间隔：插线/授权后几秒内自动建立转发</summary>
     const int PollIntervalMs = 5000;

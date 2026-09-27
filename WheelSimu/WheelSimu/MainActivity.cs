@@ -79,10 +79,10 @@ namespace WheelSimu
 
         /// <summary>
         /// USB 有线模式的固定端点。PC 端服务端会自动执行
-        /// <c>adb reverse tcp:5050 tcp:5050</c>，把 PC 的 5050 反向映射到手机本机，
+        /// <c>adb reverse tcp:25050 tcp:25050</c>，把 PC 的 25050 反向映射到手机本机，
         /// 所以手机端连 127.0.0.1 就等于连到 PC。
         /// </summary>
-        private const string USB_ENDPOINT = "127.0.0.1:5050";
+        private const string USB_ENDPOINT = "127.0.0.1:25050";
 
         /// <summary>切进 USB 模式前的 IP 输入内容，切出时还原</summary>
         private string _ipBeforeUsb;
@@ -216,7 +216,7 @@ namespace WheelSimu
             IPText = FindViewById<EditText>(Resource.Id.IPText1);
 
             // 读取已保存的IP地址
-            IPText.Text = prefs.GetString("LastIP", "192.168.1.100:5050");
+            IPText.Text = prefs.GetString("LastIP", "192.168.1.100:25050");
 
             btnConnect = FindViewById<Button>(Resource.Id.Connect);
             btnConnect.Text = "重连: 开";  // 初始状态：自动重连开启
@@ -928,7 +928,7 @@ namespace WheelSimu
         /// 连接在后台线程执行，避免阻塞 UI 线程（否则自动重连期间滑块/触摸会卡死）</summary>
         private void ConnectNow(string ipOverride = null)
         {
-            // USB 模式端点固定为 127.0.0.1：PC 端的 adb reverse 已把 PC:5050 映射到手机本机，
+            // USB 模式端点固定为 127.0.0.1：PC 端的 adb reverse 已把 PC:25050 映射到手机本机，
             // 这里必须忽略 IP 输入框与 UDP 发现到的局域网地址，否则会绕开 USB 走 WiFi。
             string ip = mConnectMode == MODE_USB
                 ? USB_ENDPOINT
@@ -1023,7 +1023,7 @@ namespace WheelSimu
                     ?.ToString() ?? "0.0.0.0";
             }
             IPData[1].IP = localIp;
-            IPData[1].Port = 5050;
+            IPData[1].Port = 25050;
 
             int colonIdx = rawText.LastIndexOf(':');
             if (colonIdx > 0)
@@ -1070,7 +1070,7 @@ namespace WheelSimu
 
             if (mConnectMode == MODE_UDP)
             {
-                Sct[1].Bind(new IPEndPoint(IPAddress.Any, 5050));
+                Sct[1].Bind(new IPEndPoint(IPAddress.Any, 25050));
                 Sct[1].Connect(RemoteEndPoint);
             }
             else

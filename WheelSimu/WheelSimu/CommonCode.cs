@@ -33,7 +33,7 @@ namespace Core
         {
             int getPort;
 
-            getPort = 5050; //+ TryTimes;
+            getPort = 25050; //+ TryTimes;
           
 
             while (getPort > 10000)

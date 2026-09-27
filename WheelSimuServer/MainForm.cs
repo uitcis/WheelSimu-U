@@ -10,7 +10,7 @@ namespace WheelSimuServer;
 public partial class MainForm : Form
 {
     // ==================== 配置 ====================
-    const int LISTEN_PORT = 5050;
+    const int LISTEN_PORT = 25050;
     const int DISCOVERY_PORT = 5051;
     const string DISCOVERY_MAGIC = "WHEELSIMU_SERVER";
     const int MAX_LOG_LINES = 1000;
@@ -541,7 +541,7 @@ public partial class MainForm : Form
     // ==================== USB 有线链路（adb 端口转发） ====================
     /// <summary>
     /// 启动 USB 链路监控：找到 adb 且手机已插线授权时，自动执行
-    /// <c>adb reverse tcp:5050 tcp:5050</c>，手机端选 USB 模式连 127.0.0.1:5050 即可。
+    /// <c>adb reverse tcp:25050 tcp:25050</c>，手机端选 USB 模式连 127.0.0.1:25050 即可。
     /// 没 adb / 没插线 / 没授权都只记状态，不影响 TCP/UDP/蓝牙。
     /// </summary>
     void StartUsbLink(CancellationToken ct)
