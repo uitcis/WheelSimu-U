@@ -8,8 +8,8 @@ using System.Threading.Tasks;
 namespace WheelSimuServer;
 
 /// <summary>
-/// USB 有线链路：调用 adb 把 PC 的 25050 端口"反向"映射到手机本机端口
-/// （<c>adb reverse tcp:25050 tcp:25050</c>）。
+/// USB 有线链路：调用 adb 把 PC 的 TCP 服务端口"反向"映射到手机本机固定端口
+/// （<c>adb reverse tcp:25050 tcp:{PC实际端口}</c>）。
 /// 手机端 App 连 <c>127.0.0.1:25050</c> 即可经 USB 数据线直达本机服务端，完全不依赖 WiFi。
 ///
 /// 前置条件：手机开启「USB 调试」并在弹窗中授权本机；PC 上能找到 adb.exe。
@@ -20,8 +20,11 @@ namespace WheelSimuServer;
 /// </summary>
 sealed class UsbAdbLink : IDisposable
 {
-    /// <summary>转发端口，与 TCP 服务端口保持一致</summary>
-    public const int TunnelPort = 25050;
+    /// <summary>手机侧固定端点：手机 App 连 127.0.0.1 的这个端口（与手机端 USB_ENDPOINT 一致）</summary>
+    public const int DeviceTunnelPort = 25050;
+
+    /// <summary>PC 侧转发目标端口，与 TCP 服务的实际监听端口保持一致（占用回落时由 MainForm 设置）</summary>
+    public static int PcTunnelPort = DeviceTunnelPort;
 
     /// <summary>轮询间隔：插线/授权后几秒内自动建立转发</summary>
     const int PollIntervalMs = 5000;
@@ -40,7 +43,7 @@ sealed class UsbAdbLink : IDisposable
     /// <summary>状态栏显示用的一句话状态</summary>
     public string StatusText { get; private set; } = "未启动";
 
-    /// <summary>转发是否已建立（手机端此刻应能连上 127.0.0.1:TunnelPort）</summary>
+    /// <summary>转发是否已建立（手机端此刻应能连上 127.0.0.1:DeviceTunnelPort）</summary>
     public bool IsReady { get; private set; }
 
     /// <summary>当前承载转发的 USB 设备序列号</summary>
@@ -149,7 +152,7 @@ sealed class UsbAdbLink : IDisposable
             _lastAppliedSerial = usb;
             _lastApplyTicks = Environment.TickCount64;
             if (!wasReady)
-                Log?.Invoke($"USB 链路就绪: {usb} -> 手机连 127.0.0.1:{TunnelPort} 即可");
+                Log?.Invoke($"USB 链路就绪: {usb} -> 手机连 127.0.0.1:{DeviceTunnelPort} 即可");
         }
 
         return PollIntervalMs;
@@ -160,7 +163,7 @@ sealed class UsbAdbLink : IDisposable
     /// <summary>建立（或重申）端口转发。adb reverse 对同一端口重复执行是幂等的。</summary>
     async Task<bool> EnsureReverseAsync(string serial, CancellationToken ct)
     {
-        var (code, output) = await RunAdbAsync($"-s {serial} reverse tcp:{TunnelPort} tcp:{TunnelPort}");
+        var (code, output) = await RunAdbAsync($"-s {serial} reverse tcp:{DeviceTunnelPort} tcp:{PcTunnelPort}");
         if (ct.IsCancellationRequested) return false;
 
         if (code == 0 && !output.Contains("error", StringComparison.OrdinalIgnoreCase)

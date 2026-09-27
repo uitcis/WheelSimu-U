@@ -10,7 +10,10 @@ namespace WheelSimuServer;
 public partial class MainForm : Form
 {
     // ==================== 配置 ====================
-    const int LISTEN_PORT = 25050;
+    const int BASE_PORT = 25050;
+    const int PORT_PROBE_COUNT = 10;
+    /// <summary>实际监听端口：启动时从 BASE_PORT 起探测，被占用则自动后移</summary>
+    int ListenPort = BASE_PORT;
     const int DISCOVERY_PORT = 5051;
     const string DISCOVERY_MAGIC = "WHEELSIMU_SERVER";
     const int MAX_LOG_LINES = 1000;
@@ -285,9 +288,10 @@ public partial class MainForm : Form
         cmbOutput.SelectedIndex = (int)OutputMode.WinUHidWheel;
 
         string ip = GetLocalIP();
+        ResolvePort();
         Log($"本机 IP: {ip}");
-        Log($"监听端口: {LISTEN_PORT}");
-        UpdateStatusUI($"IP: {ip}:{LISTEN_PORT}");
+        Log($"监听端口: {ListenPort}");
+        UpdateStatusUI($"IP: {ip}:{ListenPort}");
 
         // 启动服务器（不依赖驱动初始化，立即启动）
         _cts = new CancellationTokenSource();
@@ -496,7 +500,7 @@ public partial class MainForm : Form
         using var udp = new UdpClient();
         udp.EnableBroadcast = true;
         var endpoint = new IPEndPoint(IPAddress.Broadcast, DISCOVERY_PORT);
-        var payload = $"{DISCOVERY_MAGIC}:{localIp}:{LISTEN_PORT}";
+        var payload = $"{DISCOVERY_MAGIC}:{localIp}:{ListenPort}";
         var data = Encoding.UTF8.GetBytes(payload);
 
         while (!ct.IsCancellationRequested)
@@ -566,15 +570,15 @@ public partial class MainForm : Form
     {
         _ = BroadcastDiscovery(ct);
         _ = StartBluetoothServer(ct);
+        UsbAdbLink.PcTunnelPort = ListenPort; // 端口占用回落时，adb reverse 的 PC 侧跟随实际端口
         StartUsbLink(ct);
 
         TcpListener? listener = null;
         try
         {
-            listener = new TcpListener(IPAddress.Any, LISTEN_PORT);
-            listener.Server.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+            listener = new TcpListener(IPAddress.Any, ListenPort);
             listener.Start();
-            Log($"TCP 服务已启动 -> 0.0.0.0:{LISTEN_PORT} (等待手机连接...)");
+            Log($"TCP 服务已启动 -> 0.0.0.0:{ListenPort} (等待手机连接...)");
             Log($"UDP 广播发现 -> 端口 {DISCOVERY_PORT}");
 
             while (!ct.IsCancellationRequested)
@@ -1095,6 +1099,34 @@ public partial class MainForm : Form
     }
 
     // ==================== 辅助 ====================
+    /// <summary>
+    /// 从 BASE_PORT 起探测第一个可用端口（被占用则依次后移，最多试 PORT_PROBE_COUNT 个）。
+    /// 注意：探测绑定不能带 ReuseAddress——Windows 上它会掩盖端口真实占用，导致检测失效。
+    /// </summary>
+    void ResolvePort()
+    {
+        for (int p = BASE_PORT; p < BASE_PORT + PORT_PROBE_COUNT; p++)
+        {
+            TcpListener probe;
+            try
+            {
+                probe = new TcpListener(IPAddress.Any, p);
+                probe.Start();
+            }
+            catch (SocketException)
+            {
+                continue; // 端口被占用，试下一个
+            }
+            probe.Stop();
+            if (p != BASE_PORT)
+                Log($"端口 {BASE_PORT} 被占用，自动改用 {p}（发现广播会告知手机新端口）");
+            ListenPort = p;
+            return;
+        }
+        Log($"警告：{BASE_PORT}~{BASE_PORT + PORT_PROBE_COUNT - 1} 全被占用，仍尝试 {BASE_PORT}");
+        ListenPort = BASE_PORT;
+    }
+
     static string GetLocalIP()
     {
         try
