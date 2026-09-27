@@ -59,6 +59,12 @@ namespace WheelSimu
         Button btn6GearN;        // 6档手动挡 N(空挡)
         Button[] btn6ManualGears; // 6档手动挡 1..6
 
+        // 布局2: Xbox 手柄触屏按钮（其它布局下为 null，均判空保护）
+        Button btnPadA, btnPadB, btnPadX, btnPadY;           // 面键
+        Button btnPadLB, btnPadRB, btnPadLT, btnPadRT;       // 肩键/扳机（LT=刹车 RT=油门）
+        Button btnPadBack, btnPadMenu, btnPadLS, btnPadRS;   // 中部功能键
+        Button btnPadUp, btnPadDown, btnPadLeft, btnPadRight; // 十字键
+
         // 手动挡已改为“点选锁定”（模拟真实 H 挡硬件：拨杆卡入挡槽即保持），
         // 当前挡位由 _manualGearSelected 统一维护，不再需要按下布尔数组
         Switch SteerEnableSwitch;
@@ -87,7 +93,7 @@ namespace WheelSimu
         /// <summary>切进 USB 模式前的 IP 输入内容，切出时还原</summary>
         private string _ipBeforeUsb;
 
-        /// <summary>布局模式: 0=赛车HUD, 1=模拟方向盘</summary>
+        /// <summary>布局模式: 0=赛车HUD, 1=模拟方向盘, 2=Xbox手柄</summary>
         private int _layoutMode = 0;
 
         /// <summary>档位模式: 0=简易档(仅油门刹车), 1=真实自动挡(D/R拨动开关), 2=序列挡, 3=5档手动挡, 4=6档手动挡</summary>
@@ -192,13 +198,19 @@ namespace WheelSimu
             {
                 base.OnCreate(savedInstanceState);
 
-                // 读取布局偏好：0=赛车HUD(content_main), 1=模拟方向盘(content_wheel)
+                // 读取布局偏好：0=赛车HUD(content_main), 1=模拟方向盘(content_wheel), 2=Xbox手柄(content_gamepad)
                 var prefs = GetSharedPreferences("WheelSimuPrefs", FileCreationMode.Private);
                 _layoutMode = prefs.GetInt("LayoutMode", 0);
+                if (_layoutMode < 0 || _layoutMode > 2) _layoutMode = 0;
                 _gearMode = prefs.GetInt("GearMode", 0);
                 if (_gearMode < 0 || _gearMode > 4) _gearMode = 0;
                 _btDeviceAddress = prefs.GetString("LastBT", "");   // 蓝牙模式上次连接的 PC
-                SetContentView(_layoutMode == 0 ? Resource.Layout.activity_main : Resource.Layout.activity_wheel);
+                SetContentView(_layoutMode switch
+                {
+                    1 => Resource.Layout.activity_wheel,
+                    2 => Resource.Layout.activity_gamepad,
+                    _ => Resource.Layout.activity_main,
+                });
 
 
             //保持屏幕常亮
@@ -241,6 +253,24 @@ namespace WheelSimu
 
             btnGearUp = FindViewById<Button>(Resource.Id.btnGearUp);
             btnGearDown = FindViewById<Button>(Resource.Id.btnGearDown);
+
+            // 布局2: Xbox 手柄按钮（其它布局下为 null，发送循环判空）
+            btnPadA = FindViewById<Button>(Resource.Id.btnPadA);
+            btnPadB = FindViewById<Button>(Resource.Id.btnPadB);
+            btnPadX = FindViewById<Button>(Resource.Id.btnPadX);
+            btnPadY = FindViewById<Button>(Resource.Id.btnPadY);
+            btnPadLB = FindViewById<Button>(Resource.Id.btnPadLB);
+            btnPadRB = FindViewById<Button>(Resource.Id.btnPadRB);
+            btnPadLT = FindViewById<Button>(Resource.Id.btnPadLT);
+            btnPadRT = FindViewById<Button>(Resource.Id.btnPadRT);
+            btnPadBack = FindViewById<Button>(Resource.Id.btnPadBack);
+            btnPadMenu = FindViewById<Button>(Resource.Id.btnPadMenu);
+            btnPadLS = FindViewById<Button>(Resource.Id.btnPadLS);
+            btnPadRS = FindViewById<Button>(Resource.Id.btnPadRS);
+            btnPadUp = FindViewById<Button>(Resource.Id.btnPadUp);
+            btnPadDown = FindViewById<Button>(Resource.Id.btnPadDown);
+            btnPadLeft = FindViewById<Button>(Resource.Id.btnPadLeft);
+            btnPadRight = FindViewById<Button>(Resource.Id.btnPadRight);
             SteerEnableSwitch = FindViewById<Switch>(Resource.Id.SteerEnableSwitch);
             HandbrakeSwitch = FindViewById<Button>(Resource.Id.HandbrakeSwitch);
             InitGearControls();
@@ -314,8 +344,8 @@ namespace WheelSimu
 
             btnLayoutSwitch.Click += delegate
             {
-                // 切换布局模式并重启 Activity
-                _layoutMode = _layoutMode == 0 ? 1 : 0;
+                // 切换布局模式并重启 Activity（0=赛车HUD → 1=方向盘 → 2=Xbox手柄 → 循环）
+                _layoutMode = (_layoutMode + 1) % 3;
                 var p = GetSharedPreferences("WheelSimuPrefs", FileCreationMode.Private);
                 p.Edit().PutInt("LayoutMode", _layoutMode).Commit();
                 // 保存当前IP（Recreate 会重新读取）；USB 模式下 IPText 是固定回环地址，不覆盖
@@ -603,6 +633,26 @@ namespace WheelSimu
                         _latestDr = 0;
                         _latestGearValue = 0;
                     }
+
+                    if (_layoutMode == 2)
+                    {
+                        // Xbox 手柄布局：LT/RT = 扳机（按住=满量程），赛车挡位/手刹映射停用，
+                        // 全部按钮走 K 位掩码直通（服务端按原始 Xbox 按钮输出）
+                        _latestThrottle  = btnPadRT?.Pressed == true ? 100 : 0;
+                        _latestBrake     = btnPadLT?.Pressed == true ? 100 : 0;
+                        _latestClutch    = 0;
+                        _latestHb        = 0;
+                        _latestGearUp    = 0;
+                        _latestGearDn    = 0;
+                        _latestGear      = 0;
+                        _latestSet       = 0;
+                        _latestSetSR     = 0;
+                        _latestGearMode  = 0;
+                        _latestDr        = 0;
+                        _latestGearValue = 0;
+                    }
+                    // 布局0/1 恒为 0 → 服务端走赛车映射；布局2 为触屏按钮位掩码
+                    int padMask = _layoutMode == 2 ? ReadPadMask() : 0;
                     _latestAngle    = (float)angle;
 
                     // 方向盘角度每帧更新（动画平滑）
@@ -622,7 +672,7 @@ namespace WheelSimu
                     {
                         int len = BuildSendDataToBuffer(angle, _latestThrottle, _latestBrake, _latestClutch,
                             _latestGearUp, _latestGearDn, _latestGear, _latestSet, _latestSetSR, _latestHb,
-                            _latestGearMode, _latestDr, _latestGearValue);
+                            _latestGearMode, _latestDr, _latestGearValue, padMask);
                         try
                         {
                             if (mConnectMode == MODE_BT)
@@ -642,10 +692,36 @@ namespace WheelSimu
 
         /// <summary>在 _sendBuf 中构建发送数据，返回有效字节数</summary>
         private int BuildSendDataToBuffer(double angle, int t, int b, int c, int gu, int gd, int g, int s, int sr, int h,
-                                          int m, int dr, int gv)
+                                          int m, int dr, int gv, int k)
         {
-            string data = $"A={angle:0.0},T={t},B={b},C={c},Gu={gu},Gd={gd},G={g},S={s},SR={sr},H={h},M={m},DR={dr},GV={gv}@";
+            // K=按钮位掩码（布局2 Xbox 手柄直通）；旧版服务端会忽略未知键，向前向后兼容
+            string data = $"A={angle:0.0},T={t},B={b},C={c},Gu={gu},Gd={gd},G={g},S={s},SR={sr},H={h},M={m},DR={dr},GV={gv},K={k}@";
             return Encoding.UTF8.GetBytes(data, 0, data.Length, _sendBuf, 0);
+        }
+
+        /// <summary>
+        /// 布局2：读取 Xbox 手柄触屏按钮状态 → 按钮位掩码。
+        /// bit0..7 = A B X Y LB RB Back Menu；bit8..9 = LS RS；
+        /// bit10..13 = 十字 上 下 左 右；bit14 = Home。
+        /// </summary>
+        private int ReadPadMask()
+        {
+            int m = 0;
+            if (btnPadA?.Pressed == true) m |= 1 << 0;
+            if (btnPadB?.Pressed == true) m |= 1 << 1;
+            if (btnPadX?.Pressed == true) m |= 1 << 2;
+            if (btnPadY?.Pressed == true) m |= 1 << 3;
+            if (btnPadLB?.Pressed == true) m |= 1 << 4;
+            if (btnPadRB?.Pressed == true) m |= 1 << 5;
+            if (btnPadBack?.Pressed == true) m |= 1 << 6;
+            if (btnPadMenu?.Pressed == true) m |= 1 << 7;
+            if (btnPadLS?.Pressed == true) m |= 1 << 8;
+            if (btnPadRS?.Pressed == true) m |= 1 << 9;
+            if (btnPadUp?.Pressed == true) m |= 1 << 10;
+            if (btnPadDown?.Pressed == true) m |= 1 << 11;
+            if (btnPadLeft?.Pressed == true) m |= 1 << 12;
+            if (btnPadRight?.Pressed == true) m |= 1 << 13;
+            return m;
         }
 
         private double GetWheelData()

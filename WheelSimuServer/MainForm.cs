@@ -690,6 +690,7 @@ public partial class MainForm : Form
         int throttle = 0, brake = 0, clutch = 0, handbrake = 0;
         int gearUp = 0, gearDown = 0;
         int gearMode = 0, autoDr = 0, gearValue = 0;   // M=档位模式, DR=自动挡D/R, GV=手动挡位
+        int btnMask = 0;                               // K=手柄按钮位掩码（布局2 Xbox 直通，0=赛车映射）
 
         int len = msg.Length, pos = 0;
         while (pos < len)
@@ -712,6 +713,7 @@ public partial class MainForm : Form
                 case 'B': if (keyLen == 1) ParseInt(msg, eq + 1, valEnd, out brake); break;
                 case 'C': if (keyLen == 1) ParseInt(msg, eq + 1, valEnd, out clutch); break;
                 case 'H': if (keyLen == 1) ParseInt(msg, eq + 1, valEnd, out handbrake); break;
+                case 'K': if (keyLen == 1) ParseInt(msg, eq + 1, valEnd, out btnMask); break;
                 case 'M': if (keyLen == 1) ParseInt(msg, eq + 1, valEnd, out gearMode); break;
                 case 'D':
                     if (keyLen == 2 && msg[pos + 1] == 'R') ParseInt(msg, eq + 1, valEnd, out autoDr);
@@ -758,7 +760,7 @@ public partial class MainForm : Form
         // 按输出方式分流
         if (_outputMode == OutputMode.WinUHid)
         {
-            if (xoneReady) xoneMgr.Report(angle, throttle, brake, clutch, handbrake, gearUp, gearDown, gearMode, autoDr, gearValue);
+            if (xoneReady) xoneMgr.Report(angle, throttle, brake, clutch, handbrake, gearUp, gearDown, gearMode, autoDr, gearValue, btnMask);
         }
         else if (_outputMode == OutputMode.WinUHidWheel)
         {
