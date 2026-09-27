@@ -468,23 +468,33 @@ namespace WheelSimu
             try
             {
 
-                mSensorManager = (SensorManager)this.GetSystemService(SensorService);
+                mSensorManager ??= (SensorManager)this.GetSystemService(SensorService);
                 if (mSensorManager == null)
                 {
-                    RunOnUiThread(() => textView3.Text = "UnsupportedOperationException");
+                    RunOnUiThread(() => textView3.Text = "传感器服务不可用");
+                    return;
                 }
 
                 Sensor mSensor = mSensorManager.GetDefaultSensor(EnableSensorType);
 
                 if (mSensor == null)
                 {
-                    RunOnUiThread(() => textView3.Text = "设备" + EnableSensorType + "不支持");
+                    // 修复：设备无此传感器时直接返回；旧代码拿 null 继续注册必然失败且报错看不出原因
+                    RunOnUiThread(() => textView3.Text = $"设备不支持{SensorName(EnableSensorType)}传感器");
+                    return;
                 }
 
                 bool isRegister = mSensorManager.RegisterListener(this, mSensor, SensorDelay.Ui);
                 if (!isRegister)
                 {
-                    RunOnUiThread(() => textView3.Text = "Listener开启失败");
+                    RunOnUiThread(() => textView3.Text = SensorName(EnableSensorType) + "监听开启失败");
+                    // 冷启动时传感器 HAL 可能尚未就绪（MIUI 常见），稍后自动重试一次
+                    ThreadPool.QueueUserWorkItem(_ =>
+                    {
+                        Thread.Sleep(400);
+                        if (steerEnabled && !mSensorManager.RegisterListener(this, mSensor, SensorDelay.Ui))
+                            RunOnUiThread(() => textView3.Text = SensorName(EnableSensorType) + "监听开启失败(重试无效)");
+                    });
                 }
 
             }
@@ -497,6 +507,15 @@ namespace WheelSimu
 
 
         }
+
+        /// <summary>传感器类型的中文名（报错提示用）</summary>
+        static string SensorName(SensorType t) => t switch
+        {
+            SensorType.Gravity => "重力",
+            SensorType.Accelerometer => "加速度",
+            SensorType.LinearAcceleration => "线性加速度",
+            _ => t.ToString(),
+        };
 
 
         public void OnAccuracyChanged(Sensor sensor, SensorStatus accuracy)
