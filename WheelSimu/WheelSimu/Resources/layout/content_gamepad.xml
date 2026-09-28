@@ -206,7 +206,7 @@
                 android:id="@+id/stickLeftContainer"
                 android:layout_width="88dp"
                 android:layout_height="88dp"
-                android:translationX="-34dp" />
+                android:translationX="-50dp" />
 
             <Space
                 android:layout_width="match_parent"
@@ -217,7 +217,7 @@
             <FrameLayout
                 android:layout_width="138dp"
                 android:layout_height="138dp"
-                android:translationX="34dp">
+                android:translationX="50dp">
 
                 <Button
                     android:id="@+id/btnPadUp"
@@ -295,7 +295,7 @@
             <FrameLayout
                 android:layout_width="138dp"
                 android:layout_height="138dp"
-                android:translationX="34dp">
+                android:translationX="50dp">
 
                 <Button
                     android:id="@+id/btnPadY"
@@ -355,7 +355,7 @@
                 android:id="@+id/stickRightContainer"
                 android:layout_width="88dp"
                 android:layout_height="88dp"
-                android:translationX="-34dp" />
+                android:translationX="-50dp" />
         </LinearLayout>
     </LinearLayout>
 
