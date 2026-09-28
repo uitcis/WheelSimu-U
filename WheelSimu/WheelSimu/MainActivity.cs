@@ -62,7 +62,7 @@ namespace WheelSimu
         // 布局2: Xbox 手柄触屏按钮（其它布局下为 null，均判空保护）
         Button btnPadA, btnPadB, btnPadX, btnPadY;           // 面键
         Button btnPadLB, btnPadRB, btnPadLT, btnPadRT;       // 肩键/扳机（LT=刹车 RT=油门）
-        Button btnPadBack, btnPadMenu, btnPadLS, btnPadRS;   // 中部功能键
+        Button btnPadLS, btnPadRS;                           // 摇杆样式按键（仅点击，LS/RS）
         Button btnPadUp, btnPadDown, btnPadLeft, btnPadRight; // 十字键
 
         // 手动挡已改为“点选锁定”（模拟真实 H 挡硬件：拨杆卡入挡槽即保持），
@@ -263,8 +263,7 @@ namespace WheelSimu
             btnPadRB = FindViewById<Button>(Resource.Id.btnPadRB);
             btnPadLT = FindViewById<Button>(Resource.Id.btnPadLT);
             btnPadRT = FindViewById<Button>(Resource.Id.btnPadRT);
-            btnPadBack = FindViewById<Button>(Resource.Id.btnPadBack);
-            btnPadMenu = FindViewById<Button>(Resource.Id.btnPadMenu);
+            // btnPadBack/btnPadMenu 已从布局2 移除（字段保留为 null，ReadPadMask 的 ?. 空条件安全）
             btnPadLS = FindViewById<Button>(Resource.Id.btnPadLS);
             btnPadRS = FindViewById<Button>(Resource.Id.btnPadRS);
             btnPadUp = FindViewById<Button>(Resource.Id.btnPadUp);
@@ -732,8 +731,7 @@ namespace WheelSimu
             if (btnPadY?.Pressed == true) m |= 1 << 3;
             if (btnPadLB?.Pressed == true) m |= 1 << 4;
             if (btnPadRB?.Pressed == true) m |= 1 << 5;
-            if (btnPadBack?.Pressed == true) m |= 1 << 6;
-            if (btnPadMenu?.Pressed == true) m |= 1 << 7;
+            // bit6=Back bit7=Menu：布局2 已移除这两个键，位保留不用
             if (btnPadLS?.Pressed == true) m |= 1 << 8;
             if (btnPadRS?.Pressed == true) m |= 1 << 9;
             if (btnPadUp?.Pressed == true) m |= 1 << 10;
