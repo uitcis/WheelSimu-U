@@ -691,6 +691,7 @@ public partial class MainForm : Form
         int gearUp = 0, gearDown = 0;
         int gearMode = 0, autoDr = 0, gearValue = 0;   // M=档位模式, DR=自动挡D/R, GV=手动挡位
         int btnMask = 0;                               // K=手柄按钮位掩码（布局2 Xbox 直通，0=赛车映射）
+        int[] sticks = null;                           // J=摇杆轴量 [lx,ly,rx,ry]（-100..100，仅拖动时上报，null=传感器）
 
         int len = msg.Length, pos = 0;
         while (pos < len)
@@ -714,6 +715,7 @@ public partial class MainForm : Form
                 case 'C': if (keyLen == 1) ParseInt(msg, eq + 1, valEnd, out clutch); break;
                 case 'H': if (keyLen == 1) ParseInt(msg, eq + 1, valEnd, out handbrake); break;
                 case 'K': if (keyLen == 1) ParseInt(msg, eq + 1, valEnd, out btnMask); break;
+                case 'J': if (keyLen == 1) sticks = ParseSticks(msg, eq + 1, valEnd); break;
                 case 'M': if (keyLen == 1) ParseInt(msg, eq + 1, valEnd, out gearMode); break;
                 case 'D':
                     if (keyLen == 2 && msg[pos + 1] == 'R') ParseInt(msg, eq + 1, valEnd, out autoDr);
@@ -760,7 +762,7 @@ public partial class MainForm : Form
         // 按输出方式分流
         if (_outputMode == OutputMode.WinUHid)
         {
-            if (xoneReady) xoneMgr.Report(angle, throttle, brake, clutch, handbrake, gearUp, gearDown, gearMode, autoDr, gearValue, btnMask);
+            if (xoneReady) xoneMgr.Report(angle, throttle, brake, clutch, handbrake, gearUp, gearDown, gearMode, autoDr, gearValue, btnMask, sticks);
         }
         else if (_outputMode == OutputMode.WinUHidWheel)
         {
@@ -1072,6 +1074,27 @@ public partial class MainForm : Form
         if (start < end && s[start] == '-') { neg = true; start++; }
         while (start < end) { result = result * 10 + (s[start++] - '0'); }
         if (neg) result = -result;
+    }
+
+    /// <summary>解析 J=摇杆轴量 "lx,ly,rx,ry"（-100..100），格式异常返回 null</summary>
+    static int[] ParseSticks(string s, int start, int end)
+    {
+        try
+        {
+            var v = new int[4];
+            int idx = 0, numStart = start;
+            for (int i = start; i <= end; i++)
+            {
+                if (i == end || s[i] == ',')
+                {
+                    ParseInt(s, numStart, i, out v[idx++]);
+                    if (idx > 4) return null;
+                    numStart = i + 1;
+                }
+            }
+            return idx == 4 ? v : null;
+        }
+        catch { return null; }
     }
 
     /// <summary>从字符串的子区间直接解析 double，不创建 Substring</summary>

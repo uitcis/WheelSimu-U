@@ -130,10 +130,15 @@ public sealed class WinUHidDeviceManager : IDisposable
     ///   掩码位定义：bit0..7 = A B X Y LB RB Back Menu；bit8..9 = LS RS；
     ///   bit10..13 = 十字 上 下 左 右；bit14 = Home。
     /// </para>
+    /// <para>
+    /// <paramref name="sticks"/> ≠ null 时（手机布局2 摇杆被拖动，J=lx,ly,rx,ry，-100..100）：
+    ///   四个摇杆轴全部由手机摇杆接管——左摇杆 X 覆盖传感器转向，右摇杆 Y 覆盖离合；
+    ///   松手后手机停止上报 J=（sticks=null），自动恢复传感器转向/离合。
+    /// </para>
     /// </summary>
     public void Report(double angle, int throttle, int brake, int clutch,
                        int handbrake, int gearUp, int gearDown,
-                       int gearMode, int autoDr, int gearValue, int btnMask = 0)
+                       int gearMode, int autoDr, int gearValue, int btnMask = 0, int[] sticks = null)
     {
         lock (_lock)
         {
@@ -162,7 +167,7 @@ public sealed class WinUHidDeviceManager : IDisposable
 
             var report = new XOneInputReport
             {
-                LeftStickX = (ushort)stickX,
+                LeftStickX = (ushort)Math.Clamp(stickX, 0, 0xFFFF),
                 LeftStickY = STICK_CENTER,
                 RightStickX = STICK_CENTER,
                 RightStickY = (ushort)_lastClutch,
@@ -174,6 +179,16 @@ public sealed class WinUHidDeviceManager : IDisposable
                 Misc = 0,
                 BatteryLevel = 0xFF,
             };
+
+            // 布局2 摇杆直通：J= 存在时四个摇杆轴全部由手机摇杆接管
+            // （左摇杆 X 覆盖传感器转向，右摇杆 Y 覆盖离合；松手手机停报 J= → 自动恢复）
+            if (sticks != null)
+            {
+                report.LeftStickX = (ushort)Math.Clamp(STICK_CENTER + Math.Clamp(sticks[0], -100, 100) * 32767 / 100, 0, 0xFFFF);
+                report.LeftStickY = (ushort)Math.Clamp(STICK_CENTER + Math.Clamp(sticks[1], -100, 100) * 32767 / 100, 0, 0xFFFF);
+                report.RightStickX = (ushort)Math.Clamp(STICK_CENTER + Math.Clamp(sticks[2], -100, 100) * 32767 / 100, 0, 0xFFFF);
+                report.RightStickY = (ushort)Math.Clamp(STICK_CENTER + Math.Clamp(sticks[3], -100, 100) * 32767 / 100, 0, 0xFFFF);
+            }
 
             if (btnMask != 0)
             {

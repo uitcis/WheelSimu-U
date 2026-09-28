@@ -202,15 +202,10 @@
             android:orientation="vertical"
             android:gravity="center">
 
-            <Button
-                android:id="@+id/btnPadLS"
-                android:layout_width="64dp"
-                android:layout_height="64dp"
-                android:text="LS"
-                android:textColor="#FF4FC3F7"
-                android:textSize="14sp"
-                android:textStyle="bold"
-                android:background="@drawable/btn_pad_circle" />
+            <FrameLayout
+                android:id="@+id/stickLeftContainer"
+                android:layout_width="88dp"
+                android:layout_height="88dp" />
 
             <Space
                 android:layout_width="match_parent"
@@ -237,7 +232,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:layout_marginTop="4dp">
+                    android:layout_marginTop="6dp">
 
                     <Button
                         android:id="@+id/btnPadLeft"
@@ -249,7 +244,7 @@
                         android:textStyle="bold"
                         android:background="@drawable/btn_pad_circle" />
 
-                    <View android:layout_width="6dp" android:layout_height="1dp" />
+                    <View android:layout_width="12dp" android:layout_height="1dp" />
 
                     <Button
                         android:id="@+id/btnPadRight"
@@ -267,7 +262,7 @@
                     android:layout_width="38dp"
                     android:layout_height="38dp"
                     android:layout_gravity="center_horizontal"
-                    android:layout_marginTop="4dp"
+                    android:layout_marginTop="6dp"
                     android:text="▼"
                     android:textColor="#FF80DEEA"
                     android:textSize="15sp"
@@ -318,7 +313,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:layout_marginTop="4dp">
+                    android:layout_marginTop="6dp">
 
                     <Button
                         android:id="@+id/btnPadX"
@@ -330,7 +325,7 @@
                         android:textStyle="bold"
                         android:background="@drawable/btn_pad_circle" />
 
-                    <View android:layout_width="6dp" android:layout_height="1dp" />
+                    <View android:layout_width="12dp" android:layout_height="1dp" />
 
                     <Button
                         android:id="@+id/btnPadB"
@@ -348,7 +343,7 @@
                     android:layout_width="38dp"
                     android:layout_height="38dp"
                     android:layout_gravity="center_horizontal"
-                    android:layout_marginTop="4dp"
+                    android:layout_marginTop="6dp"
                     android:text="A"
                     android:textColor="#FF69F0AE"
                     android:textSize="16sp"
@@ -361,15 +356,10 @@
                 android:layout_height="0dp"
                 android:layout_weight="1" />
 
-            <Button
-                android:id="@+id/btnPadRS"
-                android:layout_width="64dp"
-                android:layout_height="64dp"
-                android:text="RS"
-                android:textColor="#FF4FC3F7"
-                android:textSize="14sp"
-                android:textStyle="bold"
-                android:background="@drawable/btn_pad_circle" />
+            <FrameLayout
+                android:id="@+id/stickRightContainer"
+                android:layout_width="88dp"
+                android:layout_height="88dp" />
         </LinearLayout>
     </LinearLayout>
 

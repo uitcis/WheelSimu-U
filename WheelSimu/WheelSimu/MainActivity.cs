@@ -62,7 +62,7 @@ namespace WheelSimu
         // 布局2: Xbox 手柄触屏按钮（其它布局下为 null，均判空保护）
         Button btnPadA, btnPadB, btnPadX, btnPadY;           // 面键
         Button btnPadLB, btnPadRB, btnPadLT, btnPadRT;       // 肩键/扳机（LT=刹车 RT=油门）
-        Button btnPadLS, btnPadRS;                           // 摇杆样式按键（仅点击，LS/RS）
+        JoystickView stickLeft, stickRight;                  // 可拖动模拟摇杆（LX/LY、RX/RY，松手回中）
         Button btnPadUp, btnPadDown, btnPadLeft, btnPadRight; // 十字键
 
         // 手动挡已改为“点选锁定”（模拟真实 H 挡硬件：拨杆卡入挡槽即保持），
@@ -263,9 +263,16 @@ namespace WheelSimu
             btnPadRB = FindViewById<Button>(Resource.Id.btnPadRB);
             btnPadLT = FindViewById<Button>(Resource.Id.btnPadLT);
             btnPadRT = FindViewById<Button>(Resource.Id.btnPadRT);
+            // 布局2: 可拖动模拟摇杆（其它布局下容器不存在，判空保护）
+            var stickLeftContainer = FindViewById<FrameLayout>(Resource.Id.stickLeftContainer);
+            stickLeft = new JoystickView(this) { Label = "LS" };
+            stickLeftContainer?.AddView(stickLeft, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MatchParent, FrameLayout.LayoutParams.MatchParent));
+            var stickRightContainer = FindViewById<FrameLayout>(Resource.Id.stickRightContainer);
+            stickRight = new JoystickView(this) { Label = "RS" };
+            stickRightContainer?.AddView(stickRight, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MatchParent, FrameLayout.LayoutParams.MatchParent));
             // btnPadBack/btnPadMenu 已从布局2 移除（字段保留为 null，ReadPadMask 的 ?. 空条件安全）
-            btnPadLS = FindViewById<Button>(Resource.Id.btnPadLS);
-            btnPadRS = FindViewById<Button>(Resource.Id.btnPadRS);
             btnPadUp = FindViewById<Button>(Resource.Id.btnPadUp);
             btnPadDown = FindViewById<Button>(Resource.Id.btnPadDown);
             btnPadLeft = FindViewById<Button>(Resource.Id.btnPadLeft);
@@ -672,6 +679,7 @@ namespace WheelSimu
                     }
                     // 布局0/1 恒为 0 → 服务端走赛车映射；布局2 为触屏按钮位掩码
                     int padMask = _layoutMode == 2 ? ReadPadMask() : 0;
+                    string padSticks = _layoutMode == 2 ? ReadPadSticks() : null;
                     _latestAngle    = (float)angle;
 
                     // 方向盘角度每帧更新（动画平滑）
@@ -691,7 +699,7 @@ namespace WheelSimu
                     {
                         int len = BuildSendDataToBuffer(angle, _latestThrottle, _latestBrake, _latestClutch,
                             _latestGearUp, _latestGearDn, _latestGear, _latestSet, _latestSetSR, _latestHb,
-                            _latestGearMode, _latestDr, _latestGearValue, padMask);
+                            _latestGearMode, _latestDr, _latestGearValue, padMask, padSticks);
                         try
                         {
                             if (mConnectMode == MODE_BT)
@@ -711,11 +719,25 @@ namespace WheelSimu
 
         /// <summary>在 _sendBuf 中构建发送数据，返回有效字节数</summary>
         private int BuildSendDataToBuffer(double angle, int t, int b, int c, int gu, int gd, int g, int s, int sr, int h,
-                                          int m, int dr, int gv, int k)
+                                          int m, int dr, int gv, int k, string j = null)
         {
-            // K=按钮位掩码（布局2 Xbox 手柄直通）；旧版服务端会忽略未知键，向前向后兼容
-            string data = $"A={angle:0.0},T={t},B={b},C={c},Gu={gu},Gd={gd},G={g},S={s},SR={sr},H={h},M={m},DR={dr},GV={gv},K={k}@";
+            // K=按钮位掩码（布局2 Xbox 手柄直通）；J=摇杆轴量（仅摇杆被拖动时上报）；
+            // 旧版服务端会忽略未知键，向前向后兼容
+            string data = $"A={angle:0.0},T={t},B={b},C={c},Gu={gu},Gd={gd},G={g},S={s},SR={sr},H={h},M={m},DR={dr},GV={gv},K={k}";
+            if (j != null) data += $",J={j}";
+            data += "@";
             return Encoding.UTF8.GetBytes(data, 0, data.Length, _sendBuf, 0);
+        }
+
+        /// <summary>
+        /// 布局2：读取摇杆轴量 → "lx,ly,rx,ry"（-100..100，Y 上为负）。
+        /// 仅当任一摇杆被触摸时返回非 null；全部松手返回 null（服务端恢复传感器转向/离合）。
+        /// </summary>
+        private string ReadPadSticks()
+        {
+            if (stickLeft == null || stickRight == null) return null;
+            if (!stickLeft.IsTouched && !stickRight.IsTouched) return null;
+            return $"{stickLeft.PercentX},{stickLeft.PercentY},{stickRight.PercentX},{stickRight.PercentY}";
         }
 
         /// <summary>
@@ -733,8 +755,9 @@ namespace WheelSimu
             if (btnPadLB?.Pressed == true) m |= 1 << 4;
             if (btnPadRB?.Pressed == true) m |= 1 << 5;
             // bit6=Back bit7=Menu：布局2 已移除这两个键，位保留不用
-            if (btnPadLS?.Pressed == true) m |= 1 << 8;
-            if (btnPadRS?.Pressed == true) m |= 1 << 9;
+            // 摇杆触摸中 = L3/R3 按下位（拖动输出走 J= 轴量，见 ReadPadSticks）
+            if (stickLeft?.IsTouched == true) m |= 1 << 8;
+            if (stickRight?.IsTouched == true) m |= 1 << 9;
             if (btnPadUp?.Pressed == true) m |= 1 << 10;
             if (btnPadDown?.Pressed == true) m |= 1 << 11;
             if (btnPadLeft?.Pressed == true) m |= 1 << 12;
