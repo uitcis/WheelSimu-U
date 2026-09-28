@@ -205,17 +205,19 @@
             <FrameLayout
                 android:id="@+id/stickLeftContainer"
                 android:layout_width="88dp"
-                android:layout_height="88dp" />
+                android:layout_height="88dp"
+                android:translationX="-14dp" />
 
             <Space
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_weight="1" />
 
-            <!-- 十字键：精确九宫格（3格×46dp），▲◀▶▼ 居中位于四边外侧格，中心格留空 -->
+            <!-- 十字键：精确九宫格（3格×46dp），▲◀▶▼ 居中位于四边外侧格，中心格留空；相对摇杆向右错开 -->
             <FrameLayout
                 android:layout_width="138dp"
-                android:layout_height="138dp">
+                android:layout_height="138dp"
+                android:translationX="14dp">
 
                 <Button
                     android:id="@+id/btnPadUp"
@@ -289,10 +291,11 @@
             android:orientation="vertical"
             android:gravity="center">
 
-            <!-- 面键：精确九宫格（3格×46dp），Y/X/B/A 居中位于四边外侧格，中心格留空 -->
+            <!-- 面键：精确九宫格（3格×46dp），Y/X/B/A 居中位于四边外侧格，中心格留空；相对摇杆向左错开 -->
             <FrameLayout
                 android:layout_width="138dp"
-                android:layout_height="138dp">
+                android:layout_height="138dp"
+                android:translationX="-14dp">
 
                 <Button
                     android:id="@+id/btnPadY"
@@ -351,7 +354,8 @@
             <FrameLayout
                 android:id="@+id/stickRightContainer"
                 android:layout_width="88dp"
-                android:layout_height="88dp" />
+                android:layout_height="88dp"
+                android:translationX="14dp" />
         </LinearLayout>
     </LinearLayout>
 
