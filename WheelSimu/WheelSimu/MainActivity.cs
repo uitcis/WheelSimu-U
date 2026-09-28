@@ -274,9 +274,10 @@ namespace WheelSimu
             HandbrakeSwitch = FindViewById<Button>(Resource.Id.HandbrakeSwitch);
             InitGearControls();
 
-            // 程序化创建方向盘视图
+            // 程序化创建方向盘视图（布局2：不画背景底板，避免方向盘后出现黑色方块）
             var container = FindViewById<FrameLayout>(Resource.Id.steeringWheelContainer);
             steeringWheel = new SteeringWheelView(this);
+            if (_layoutMode == 2) steeringWheel.ShowBackdrop = false;   // 仅布局2 去黑底
             container.AddView(steeringWheel, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MatchParent, FrameLayout.LayoutParams.MatchParent));
 

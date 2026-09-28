@@ -76,6 +76,9 @@ namespace WheelSimu
             }
         }
 
+        /// <summary>是否绘制径向渐变背景底板（布局2 手柄界面置 false，避免方向盘后面出现黑色方块）</summary>
+        public bool ShowBackdrop { get; set; } = true;
+
         private void Init()
         {
             // 背景
@@ -91,7 +94,6 @@ namespace WheelSimu
             _rimGlowPaint.StrokeWidth = 8f;
             _rimGlowPaint.Color = Color.Argb(60, 0, 200, 255); // 青蓝发光
             _rimGlowPaint.SetShadowLayer(12f, 0, 0, Color.Argb(120, 0, 200, 255));
-
             // 辐条 — 碳纤维黑
             _spokePaint = new Paint { AntiAlias = true };
             _spokePaint.SetStyle(Paint.Style.Fill);
@@ -201,6 +203,8 @@ namespace WheelSimu
         // ================================================================
         private void DrawBackground(Canvas canvas)
         {
+            if (!ShowBackdrop) return;
+
             float bgSize = _radius + 40f;
             var bgRect = new RectF(_centerX - bgSize, _centerY - bgSize,
                                    _centerX + bgSize, _centerY + bgSize);

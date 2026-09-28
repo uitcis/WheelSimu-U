@@ -11,7 +11,7 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="#080A0E"
-    android:padding="6dp">
+    android:padding="4dp">
 
     <!-- ========== 隐藏的兼容控件 — 发送循环会读取，必须存在 ========== -->
     <TextView android:id="@+id/textView1" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone" />
@@ -32,7 +32,7 @@
     <!-- ========== 顶部状态栏（与其它布局一致） ========== -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="34dp"
+        android:layout_height="30dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:paddingHorizontal="10dp"
@@ -121,13 +121,13 @@
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:layout_marginVertical="4dp"
+        android:layout_marginVertical="2dp"
         android:background="#18222B" />
 
     <!-- ========== 肩键行1: LB / RB ========== -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="44dp"
+        android:layout_height="38dp"
         android:orientation="horizontal">
 
         <Button
@@ -157,9 +157,9 @@
     <!-- ========== 肩键行2: LT / RT（扳机，按住=满量程） ========== -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="44dp"
+        android:layout_height="38dp"
         android:orientation="horizontal"
-        android:layout_marginTop="4dp">
+        android:layout_marginTop="2dp">
 
         <Button
             android:id="@+id/btnPadLT"
@@ -192,7 +192,7 @@
         android:layout_weight="1"
         android:orientation="horizontal"
         android:weightSum="10"
-        android:layout_marginTop="4dp">
+        android:layout_marginTop="2dp">
 
         <!-- ===== 左列: LS 摇杆(仅按键) + 十字键 ===== -->
         <LinearLayout
@@ -204,8 +204,8 @@
 
             <Button
                 android:id="@+id/btnPadLS"
-                android:layout_width="80dp"
-                android:layout_height="80dp"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
                 android:text="LS"
                 android:textColor="#FF4FC3F7"
                 android:textSize="14sp"
@@ -224,8 +224,9 @@
 
                 <Button
                     android:id="@+id/btnPadUp"
-                    android:layout_width="match_parent"
-                    android:layout_height="42dp"
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
+                    android:layout_gravity="center_horizontal"
                     android:text="▲"
                     android:textColor="#FF80DEEA"
                     android:textSize="15sp"
@@ -233,15 +234,15 @@
                     android:background="@drawable/btn_pad_circle" />
 
                 <LinearLayout
-                    android:layout_width="match_parent"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:layout_marginTop="4dp">
 
                     <Button
                         android:id="@+id/btnPadLeft"
-                        android:layout_width="42dp"
-                        android:layout_height="42dp"
+                        android:layout_width="38dp"
+                        android:layout_height="38dp"
                         android:text="◀"
                         android:textColor="#FF80DEEA"
                         android:textSize="15sp"
@@ -252,8 +253,8 @@
 
                     <Button
                         android:id="@+id/btnPadRight"
-                        android:layout_width="42dp"
-                        android:layout_height="42dp"
+                        android:layout_width="38dp"
+                        android:layout_height="38dp"
                         android:text="▶"
                         android:textColor="#FF80DEEA"
                         android:textSize="15sp"
@@ -263,8 +264,9 @@
 
                 <Button
                     android:id="@+id/btnPadDown"
-                    android:layout_width="match_parent"
-                    android:layout_height="42dp"
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
+                    android:layout_gravity="center_horizontal"
                     android:layout_marginTop="4dp"
                     android:text="▼"
                     android:textColor="#FF80DEEA"
@@ -303,8 +305,8 @@
 
                 <Button
                     android:id="@+id/btnPadY"
-                    android:layout_width="42dp"
-                    android:layout_height="42dp"
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
                     android:layout_gravity="center_horizontal"
                     android:text="Y"
                     android:textColor="#FFFFD740"
@@ -313,15 +315,15 @@
                     android:background="@drawable/btn_pad_circle" />
 
                 <LinearLayout
-                    android:layout_width="match_parent"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:layout_marginTop="4dp">
 
                     <Button
                         android:id="@+id/btnPadX"
-                        android:layout_width="42dp"
-                        android:layout_height="42dp"
+                        android:layout_width="38dp"
+                        android:layout_height="38dp"
                         android:text="X"
                         android:textColor="#FF4FC3F7"
                         android:textSize="16sp"
@@ -332,8 +334,8 @@
 
                     <Button
                         android:id="@+id/btnPadB"
-                        android:layout_width="42dp"
-                        android:layout_height="42dp"
+                        android:layout_width="38dp"
+                        android:layout_height="38dp"
                         android:text="B"
                         android:textColor="#FFFF5252"
                         android:textSize="16sp"
@@ -343,8 +345,8 @@
 
                 <Button
                     android:id="@+id/btnPadA"
-                    android:layout_width="42dp"
-                    android:layout_height="42dp"
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
                     android:layout_gravity="center_horizontal"
                     android:layout_marginTop="4dp"
                     android:text="A"
@@ -361,8 +363,8 @@
 
             <Button
                 android:id="@+id/btnPadRS"
-                android:layout_width="80dp"
-                android:layout_height="80dp"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
                 android:text="RS"
                 android:textColor="#FF4FC3F7"
                 android:textSize="14sp"
@@ -374,10 +376,10 @@
     <!-- ========== 底部: 数据传输开关 ========== -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="32dp"
+        android:layout_height="28dp"
         android:orientation="horizontal"
         android:gravity="center"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="2dp"
         android:background="@drawable/round_rect_bg">
 
         <TextView
