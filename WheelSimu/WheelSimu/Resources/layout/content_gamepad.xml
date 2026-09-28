@@ -219,12 +219,12 @@
 
                 <Button
                     android:id="@+id/btnPadUp"
-                    android:layout_width="38dp"
-                    android:layout_height="38dp"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
                     android:layout_gravity="center_horizontal"
                     android:text="▲"
                     android:textColor="#FF80DEEA"
-                    android:textSize="15sp"
+                    android:textSize="12sp"
                     android:textStyle="bold"
                     android:background="@drawable/btn_pad_circle" />
 
@@ -232,40 +232,40 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:layout_marginTop="6dp">
+                    android:layout_marginTop="10dp">
 
                     <Button
                         android:id="@+id/btnPadLeft"
-                        android:layout_width="38dp"
-                        android:layout_height="38dp"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
                         android:text="◀"
                         android:textColor="#FF80DEEA"
-                        android:textSize="15sp"
+                        android:textSize="12sp"
                         android:textStyle="bold"
                         android:background="@drawable/btn_pad_circle" />
 
-                    <View android:layout_width="12dp" android:layout_height="1dp" />
+                    <View android:layout_width="10dp" android:layout_height="1dp" />
 
                     <Button
                         android:id="@+id/btnPadRight"
-                        android:layout_width="38dp"
-                        android:layout_height="38dp"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
                         android:text="▶"
                         android:textColor="#FF80DEEA"
-                        android:textSize="15sp"
+                        android:textSize="12sp"
                         android:textStyle="bold"
                         android:background="@drawable/btn_pad_circle" />
                 </LinearLayout>
 
                 <Button
                     android:id="@+id/btnPadDown"
-                    android:layout_width="38dp"
-                    android:layout_height="38dp"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
                     android:layout_gravity="center_horizontal"
-                    android:layout_marginTop="6dp"
+                    android:layout_marginTop="10dp"
                     android:text="▼"
                     android:textColor="#FF80DEEA"
-                    android:textSize="15sp"
+                    android:textSize="12sp"
                     android:textStyle="bold"
                     android:background="@drawable/btn_pad_circle" />
             </LinearLayout>
@@ -300,8 +300,8 @@
 
                 <Button
                     android:id="@+id/btnPadY"
-                    android:layout_width="38dp"
-                    android:layout_height="38dp"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
                     android:layout_gravity="center_horizontal"
                     android:text="Y"
                     android:textColor="#FFFFD740"
@@ -313,24 +313,24 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:layout_marginTop="6dp">
+                    android:layout_marginTop="10dp">
 
                     <Button
                         android:id="@+id/btnPadX"
-                        android:layout_width="38dp"
-                        android:layout_height="38dp"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
                         android:text="X"
                         android:textColor="#FF4FC3F7"
                         android:textSize="16sp"
                         android:textStyle="bold"
                         android:background="@drawable/btn_pad_circle" />
 
-                    <View android:layout_width="12dp" android:layout_height="1dp" />
+                    <View android:layout_width="10dp" android:layout_height="1dp" />
 
                     <Button
                         android:id="@+id/btnPadB"
-                        android:layout_width="38dp"
-                        android:layout_height="38dp"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
                         android:text="B"
                         android:textColor="#FFFF5252"
                         android:textSize="16sp"
@@ -340,10 +340,10 @@
 
                 <Button
                     android:id="@+id/btnPadA"
-                    android:layout_width="38dp"
-                    android:layout_height="38dp"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
                     android:layout_gravity="center_horizontal"
-                    android:layout_marginTop="6dp"
+                    android:layout_marginTop="10dp"
                     android:text="A"
                     android:textColor="#FF69F0AE"
                     android:textSize="16sp"
