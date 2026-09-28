@@ -160,7 +160,7 @@ public sealed class WinUHidWheelDeviceManager : IDisposable
             _descPinned = GCHandle.Alloc(k_WheelReportDescriptor, GCHandleType.Pinned);
 
             // HardwareIDs（REG_MULTI_SZ：字符串 + 双 null 结尾）
-            const string hwIds = "HID\\VID_1234&PID_5678";
+            const string hwIds = "HID\\VID_046D&PID_C262";
             _hardwareIds = Marshal.StringToHGlobalUni(hwIds + "\0\0");
 
             try
@@ -168,8 +168,8 @@ public sealed class WinUHidWheelDeviceManager : IDisposable
                 var config = new WINUHID_DEVICE_CONFIG
                 {
                     SupportedEvents = 0,
-                    VendorID = 0x1234,
-                    ProductID = 0x5678,
+                    VendorID = 0x046D,
+                    ProductID = 0xC262,
                     VersionNumber = 1,
                     ReportDescriptorLength = (ushort)k_WheelReportDescriptor.Length,
                     ReportDescriptor = _descPinned.AddrOfPinnedObject(),
