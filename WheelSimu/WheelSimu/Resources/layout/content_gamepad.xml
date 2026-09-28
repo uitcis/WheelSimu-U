@@ -212,63 +212,59 @@
                 android:layout_height="0dp"
                 android:layout_weight="1" />
 
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="vertical">
+            <!-- 十字键：精确九宫格（3格×46dp），▲◀▶▼ 居中位于四边外侧格，中心格留空 -->
+            <FrameLayout
+                android:layout_width="138dp"
+                android:layout_height="138dp">
 
                 <Button
                     android:id="@+id/btnPadUp"
                     android:layout_width="36dp"
                     android:layout_height="36dp"
-                    android:layout_gravity="center_horizontal"
+                    android:layout_marginStart="51dp"
+                    android:layout_marginTop="5dp"
                     android:text="▲"
                     android:textColor="#FF80DEEA"
                     android:textSize="12sp"
                     android:textStyle="bold"
                     android:background="@drawable/btn_pad_circle" />
 
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginTop="10dp">
+                <Button
+                    android:id="@+id/btnPadLeft"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="5dp"
+                    android:layout_marginTop="51dp"
+                    android:text="◀"
+                    android:textColor="#FF80DEEA"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:background="@drawable/btn_pad_circle" />
 
-                    <Button
-                        android:id="@+id/btnPadLeft"
-                        android:layout_width="36dp"
-                        android:layout_height="36dp"
-                        android:text="◀"
-                        android:textColor="#FF80DEEA"
-                        android:textSize="12sp"
-                        android:textStyle="bold"
-                        android:background="@drawable/btn_pad_circle" />
-
-                    <View android:layout_width="10dp" android:layout_height="1dp" />
-
-                    <Button
-                        android:id="@+id/btnPadRight"
-                        android:layout_width="36dp"
-                        android:layout_height="36dp"
-                        android:text="▶"
-                        android:textColor="#FF80DEEA"
-                        android:textSize="12sp"
-                        android:textStyle="bold"
-                        android:background="@drawable/btn_pad_circle" />
-                </LinearLayout>
+                <Button
+                    android:id="@+id/btnPadRight"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="97dp"
+                    android:layout_marginTop="51dp"
+                    android:text="▶"
+                    android:textColor="#FF80DEEA"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:background="@drawable/btn_pad_circle" />
 
                 <Button
                     android:id="@+id/btnPadDown"
                     android:layout_width="36dp"
                     android:layout_height="36dp"
-                    android:layout_gravity="center_horizontal"
-                    android:layout_marginTop="10dp"
+                    android:layout_marginStart="51dp"
+                    android:layout_marginTop="97dp"
                     android:text="▼"
                     android:textColor="#FF80DEEA"
                     android:textSize="12sp"
                     android:textStyle="bold"
                     android:background="@drawable/btn_pad_circle" />
-            </LinearLayout>
+            </FrameLayout>
         </LinearLayout>
 
         <!-- ===== 中列: 转向指示（复用 SteeringWheelView，代码自动装入） ===== -->
@@ -293,63 +289,59 @@
             android:orientation="vertical"
             android:gravity="center">
 
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="vertical">
+            <!-- 面键：精确九宫格（3格×46dp），Y/X/B/A 居中位于四边外侧格，中心格留空 -->
+            <FrameLayout
+                android:layout_width="138dp"
+                android:layout_height="138dp">
 
                 <Button
                     android:id="@+id/btnPadY"
                     android:layout_width="36dp"
                     android:layout_height="36dp"
-                    android:layout_gravity="center_horizontal"
+                    android:layout_marginStart="51dp"
+                    android:layout_marginTop="5dp"
                     android:text="Y"
                     android:textColor="#FFFFD740"
                     android:textSize="16sp"
                     android:textStyle="bold"
                     android:background="@drawable/btn_pad_circle" />
 
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginTop="10dp">
+                <Button
+                    android:id="@+id/btnPadX"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="5dp"
+                    android:layout_marginTop="51dp"
+                    android:text="X"
+                    android:textColor="#FF4FC3F7"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:background="@drawable/btn_pad_circle" />
 
-                    <Button
-                        android:id="@+id/btnPadX"
-                        android:layout_width="36dp"
-                        android:layout_height="36dp"
-                        android:text="X"
-                        android:textColor="#FF4FC3F7"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
-                        android:background="@drawable/btn_pad_circle" />
-
-                    <View android:layout_width="10dp" android:layout_height="1dp" />
-
-                    <Button
-                        android:id="@+id/btnPadB"
-                        android:layout_width="36dp"
-                        android:layout_height="36dp"
-                        android:text="B"
-                        android:textColor="#FFFF5252"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
-                        android:background="@drawable/btn_pad_circle" />
-                </LinearLayout>
+                <Button
+                    android:id="@+id/btnPadB"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="97dp"
+                    android:layout_marginTop="51dp"
+                    android:text="B"
+                    android:textColor="#FFFF5252"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:background="@drawable/btn_pad_circle" />
 
                 <Button
                     android:id="@+id/btnPadA"
                     android:layout_width="36dp"
                     android:layout_height="36dp"
-                    android:layout_gravity="center_horizontal"
-                    android:layout_marginTop="10dp"
+                    android:layout_marginStart="51dp"
+                    android:layout_marginTop="97dp"
                     android:text="A"
                     android:textColor="#FF69F0AE"
                     android:textSize="16sp"
                     android:textStyle="bold"
                     android:background="@drawable/btn_pad_circle" />
-            </LinearLayout>
+            </FrameLayout>
 
             <Space
                 android:layout_width="match_parent"
