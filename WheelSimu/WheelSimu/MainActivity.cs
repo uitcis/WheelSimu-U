@@ -384,15 +384,13 @@ namespace WheelSimu
                 ThreadPool.QueueUserWorkItem(o => SteerEnableSwitch_OnClick());
             };
 
-            // 数据传输开关默认打开：这里只置位开关 + 启动发送定时器。
+            // 「数据传输」开关默认打开（现在只管传感器启停）。
             // 传感器注册交给 OnResume —— OnCreate 阶段 Activity 尚未可见，系统会拒绝注册，
             // 这正是每次冷启动都提示"重力监听开启失败"的来源。
             SteerEnableSwitch.Checked = true;
             steerEnabled = true;
-            if (sendTimer == null)
-                sendTimer = new System.Threading.Timer(_ => SendControlData(), null, sendIntervalMs, sendIntervalMs);
-            else
-                sendTimer.Change(0, sendIntervalMs);
+            // 发送定时器只创建不启动，统一由 OnResume 启动（前台常驻发送，与开关无关）
+            sendTimer ??= new System.Threading.Timer(_ => SendControlData(), null, Timeout.Infinite, Timeout.Infinite);
 
             //vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv事件接口设置vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
 
@@ -616,31 +614,21 @@ namespace WheelSimu
 
 
 
+        /// <summary>
+        /// 「数据传输」开关：只控制传感器（转向）的启停。
+        /// 数据发送已改为随 Activity 前台生命周期常驻（OnResume 启动 / OnPause 暂停），不再由该开关启停，
+        /// 因此关掉开关后按钮、踏板、挡位等仍会正常上传，只有转向轴回到中位。
+        /// </summary>
         private void SteerEnableSwitch_OnClick()
         {
             try
             {
-                if (SteerEnableSwitch.Checked)
-                {
-                    steerEnabled = true;
-                    StartSensors();
+                steerEnabled = SteerEnableSwitch.Checked;
 
-                    // 启动定时发送
-                    if (sendTimer == null)
-                    {
-                        sendTimer = new System.Threading.Timer(_ => SendControlData(), null, sendIntervalMs, sendIntervalMs);
-                    }
-                    else
-                    {
-                        sendTimer.Change(0, sendIntervalMs);
-                    }
-                }
+                if (steerEnabled)
+                    StartSensors();
                 else
-                {
-                    steerEnabled = false;
                     StopSensors();
-                    sendTimer?.Change(Timeout.Infinite, Timeout.Infinite);
-                }
             }
             catch (Exception ex)
             {
@@ -678,11 +666,12 @@ namespace WheelSimu
         /// </summary>
         private void SendControlData()
         {
-            if (!steerEnabled) return;
             try
             {
+                // 发送与传感器解耦：开关只管传感器启停，发送由 Activity 生命周期（OnResume/OnPause）控制。
+                // 传感器未启用时转向轴恒居中，避免传感器停止后残值把轴卡在某个角度。
                 double angle;
-                lock (sensorLock) { angle = GetWheelData(); }
+                lock (sensorLock) { angle = steerEnabled ? GetWheelData() : 0; }
 
                 // 在 UI 线程读取控件状态 & 构建发送数据（一次性完成）
                 RunOnUiThread(() =>
@@ -1413,11 +1402,10 @@ namespace WheelSimu
         protected override void OnResume()
         {
             base.OnResume();
-            if (steerEnabled)
-            {
-                StartSensors();
-                sendTimer?.Change(0, sendIntervalMs);
-            }
+            // 传感器按开关状态启用
+            if (steerEnabled) StartSensors();
+            // 数据发送随前台常驻：不再依赖开关状态
+            sendTimer?.Change(0, sendIntervalMs);
         }
 
         protected override void OnPause()
