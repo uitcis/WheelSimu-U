@@ -132,6 +132,7 @@ namespace WheelSimu
         double AcX1, AcY1, AcZ1;
         double AcX2, AcY2, AcZ2;
         double TmpX = 0;
+        double _lastSign = 1;  // 最近一次稳定的朝向符号（AcX1 死区内沿用它，防止噪声翻转）；仅在 sensorLock 内访问
         double Hp = 0; //Hemisphere 方向盘大于+-90度的情况
         readonly double gAngle = 90 / 9.8; //一单位g值对应角度
         private readonly object sensorLock = new object();
@@ -806,29 +807,30 @@ namespace WheelSimu
                         break;
                     }
             }
-            if (TmpX > 0 && AcX1 < 0) //朝向由上变为下
-
+            // === 朝向符号判定死区（关键修复）===
+            // 手机竖直握持时 AcX1（垂直方向加速度）≈ 0，传感器噪声会让它正负反复跳变，
+            // 从而反复触发下面的 Hp±1 半球翻转，导致角度在 0 / 180 之间剧烈跳变；
+            // 游戏"变更输入映射"界面会把这种跳变当成用户输入而立即自动绑定该轴。
+            // 另外 AcX1 == 0 时 AcX1/Math.Abs(AcX1) = NaN，服务端 (int)Math.Round(NaN) 会
+            // 被钳成 0 → 轴突然跳到最左，同样会被绑定界面捕获。
+            // 因此 |AcX1| 小于阈值时不更新朝向判定，沿用上次的稳定符号。
+            const double SIGN_DEADZONE = 1.5;   // m/s²，约 8.8° 倾角
+            double sgn = _lastSign;
+            if (Math.Abs(AcX1) > SIGN_DEADZONE)
             {
-                if (y < 0) //左转
+                sgn = AcX1 >= 0 ? 1 : -1;
+                if (TmpX > 0 && AcX1 < 0) //朝向由上变为下
                 {
-                    Hp -= 1;
+                    if (y < 0) Hp -= 1;   //左转
+                    else       Hp += 1;   //右转
                 }
-                else       //右转
+                else if (TmpX < 0 && AcX1 > 0) //朝向由下变为上
                 {
-                    Hp += 1;
+                    if (y < 0) Hp += 1;   //右转
+                    else       Hp -= 1;   //左转
                 }
-            }
-            else if (TmpX < 0 && AcX1 > 0) //朝向由下变为上
-
-            {
-                if (y < 0) //右转
-                {
-                    Hp += 1;
-                }
-                else       //左转
-                {
-                    Hp -= 1;
-                }
+                TmpX = AcX1;
+                _lastSign = sgn;
             }
 
             //限制转向范围为900度
@@ -847,8 +849,14 @@ namespace WheelSimu
             //-270 ~ -90   = -90 + (-90 - y) = -180 - y    Hp=-1       手机朝下
             // 270 ~ 450   = 360 + y                       Hp=2        手机朝上
             //-270 ~-450   = -360 + y                      Hp=-2       手机朝上
-            data = 180 * Hp + y * (AcX1 / Math.Abs(AcX1));
-            TmpX = AcX1;
+            // === 角度死区 ===
+            // 静止时 AcY1 仍有噪声（±0.02 m/s² ≈ ±0.2°），直接输出会让转向轴持续微抖，
+            // 同样会被游戏的绑定界面当成输入。这里小于阈值时归零（输出精确中心）。
+            const double ANGLE_DEADZONE = 1.0;  // 度
+            if (Math.Abs(y) < ANGLE_DEADZONE) y = 0;
+
+            // 用已过滤的稳定符号 sgn，避免 AcX1==0 时产生 NaN
+            data = 180 * Hp + y * sgn;
             return data;
         }
 

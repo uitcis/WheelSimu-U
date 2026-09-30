@@ -51,6 +51,8 @@ public sealed class WinUHidDeviceManager : IDisposable
     const int STICK_CENTER = 0x8000;
     const int TRIGGER_MAX = 1023;               // 10bit
     const double ANGLE_RATIO = 32767.0 / 900.0; // ±450° → 摇杆满行程
+    // 转向死区（度）：静止噪声小于该值时输出精确中心，避免轴微抖被游戏绑定界面捕获
+    const double STEER_DEADZONE = 1.0;
     const int SMOOTH_STEP = TRIGGER_MAX / 30;
     const int CLUTCH_SMOOTH_STEP = 1000;        // 离合轴（右摇杆 Y）平滑步长
     const int GEAR_HOLD_TICKS = 6;              // 升/降档脉冲保持 6 帧（约 60ms），确保游戏捕捉到点击
@@ -144,8 +146,12 @@ public sealed class WinUHidDeviceManager : IDisposable
         {
             if (_handle == IntPtr.Zero) return;
 
-            // 左摇杆 X：角度 → 摇杆（0x8000 居中）
-            int stickX = (int)Math.Round(STICK_CENTER + angle * ANGLE_RATIO);
+            // 防 NaN / Infinity：非法角度会被 (int)Math.Round 钳成 0 → 轴跳到最左并被游戏捕获
+            if (double.IsNaN(angle) || double.IsInfinity(angle)) angle = 0;
+
+            // 左摇杆 X：角度 → 摇杆（0x8000 居中）；静止噪声（<1°）归中心
+            double steerAngle = Math.Abs(angle) < STEER_DEADZONE ? 0.0 : angle;
+            int stickX = (int)Math.Round(STICK_CENTER + steerAngle * ANGLE_RATIO);
             stickX = Math.Clamp(stickX, 0, 0xFFFF);
 
             // 三个踏板独立通道（互不干扰，允许油离/跟趾配合）

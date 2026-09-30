@@ -110,6 +110,8 @@ public sealed class WinUHidWheelDeviceManager : IDisposable
     const int AXIS_MAX = 0xFFFF;
     // 满行程 ±540°（等效比例 angle/540，对应 1080° 方向盘转角，保证手机角度与游戏 1:1）
     const double ANGLE_RATIO = 32767.0 / 540.0;
+    // 转向死区（度）：静止噪声小于该值时输出精确中心，避免轴微抖被游戏绑定界面捕获
+    const double STEER_DEADZONE = 1.0;
     const int SMOOTH_STEP = AXIS_MAX / 30;
     const int CLUTCH_SMOOTH_STEP = AXIS_MAX / 60;
     const int GEAR_HOLD_TICKS = 6;   // 升降档脉冲保持 ~60ms
@@ -256,8 +258,15 @@ public sealed class WinUHidWheelDeviceManager : IDisposable
             _lastBrake = Smooth(_lastBrake, targetBrake, SMOOTH_STEP);
             _lastClutch = Smooth(_lastClutch, targetClutch, CLUTCH_SMOOTH_STEP);
 
+            // 防 NaN / Infinity：手机端异常时可能发出非法角度，
+            // (int)Math.Round(NaN) 会被钳成 0 → 轴瞬间跳到最左，游戏绑定界面会立刻捕获。
+            if (double.IsNaN(angle) || double.IsInfinity(angle)) angle = 0;
+
             // X=转向, Y=油门（标准 DirectInput 方向盘映射）
-            int x = (int)Math.Round(STICK_CENTER + angle * ANGLE_RATIO);  // X = 转向
+            // 转向死区：|角度| 小于阈值时输出精确中心，消除静止噪声造成的轴微抖
+            // ——游戏的"变更输入映射"界面会把任何在动的轴当成输入而自动绑定。
+            double steerAngle = Math.Abs(angle) < STEER_DEADZONE ? 0.0 : angle;
+            int x = (int)Math.Round(STICK_CENTER + steerAngle * ANGLE_RATIO);  // X = 转向
             x = Math.Clamp(x, 0, AXIS_MAX);
             int y = _lastThrottle;           // Y = 油门
 
