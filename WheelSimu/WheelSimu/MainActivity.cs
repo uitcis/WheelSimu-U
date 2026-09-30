@@ -141,6 +141,12 @@ namespace WheelSimu
         //SensorMode = 0 Xamarin ; 1 android.Hardware ; 2,3 混合模式
         readonly int SensorMode = 1;
 
+        // 传感器注册必须在带 Looper 的主线程执行；冷启动时 SensorService 常未就绪，
+        // 首次 RegisterListener 会返回 false，故用主线程退避重试（250/500/1000/2000/4000ms）。
+        private readonly Handler _mainHandler = new Handler(Looper.MainLooper);
+        private const int SENSOR_RETRY_MAX = 5;
+        private volatile bool _sensorErrShown;   // textView3 上是否挂着本 App 写的传感器错误提示
+
         // 定时器替代忙等轮询
         private System.Threading.Timer sendTimer;
         private readonly int sendIntervalMs = 10; // 100Hz 发送频率
@@ -378,9 +384,15 @@ namespace WheelSimu
                 ThreadPool.QueueUserWorkItem(o => SteerEnableSwitch_OnClick());
             };
 
-            // 数据传输开关默认打开：启动即启用方向盘传感器并开始发送
+            // 数据传输开关默认打开：这里只置位开关 + 启动发送定时器。
+            // 传感器注册交给 OnResume —— OnCreate 阶段 Activity 尚未可见，系统会拒绝注册，
+            // 这正是每次冷启动都提示"重力监听开启失败"的来源。
             SteerEnableSwitch.Checked = true;
-            SteerEnableSwitch_OnClick();
+            steerEnabled = true;
+            if (sendTimer == null)
+                sendTimer = new System.Threading.Timer(_ => SendControlData(), null, sendIntervalMs, sendIntervalMs);
+            else
+                sendTimer.Change(0, sendIntervalMs);
 
             //vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv事件接口设置vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
 
@@ -479,6 +491,7 @@ namespace WheelSimu
                 mSensorManager ??= (SensorManager)this.GetSystemService(SensorService);
                 if (mSensorManager == null)
                 {
+                    _sensorErrShown = true;
                     RunOnUiThread(() => textView3.Text = "传感器服务不可用");
                     return;
                 }
@@ -487,23 +500,26 @@ namespace WheelSimu
 
                 if (mSensor == null)
                 {
-                    // 修复：设备无此传感器时直接返回；旧代码拿 null 继续注册必然失败且报错看不出原因
+                    // 设备硬件确实没有该传感器，重试无意义，直接提示
+                    _sensorErrShown = true;
                     RunOnUiThread(() => textView3.Text = $"设备不支持{SensorName(EnableSensorType)}传感器");
                     return;
                 }
 
-                bool isRegister = mSensorManager.RegisterListener(this, mSensor, SensorDelay.Ui);
-                if (!isRegister)
+                // 注册放到主线程：RegisterListener 需要 Looper，且在后台线程调用在部分 ROM 上必然失败
+                _mainHandler.Post(() =>
                 {
-                    RunOnUiThread(() => textView3.Text = SensorName(EnableSensorType) + "监听开启失败");
-                    // 冷启动时传感器 HAL 可能尚未就绪（MIUI 常见），稍后自动重试一次
-                    ThreadPool.QueueUserWorkItem(_ =>
+                    if (!steerEnabled || mSensorManager == null) return;
+                    if (mSensorManager.RegisterListener(this, mSensor, SensorDelay.Ui))
                     {
-                        Thread.Sleep(400);
-                        if (steerEnabled && !mSensorManager.RegisterListener(this, mSensor, SensorDelay.Ui))
-                            RunOnUiThread(() => textView3.Text = SensorName(EnableSensorType) + "监听开启失败(重试无效)");
-                    });
-                }
+                        ClearSensorError();
+                    }
+                    else
+                    {
+                        // 冷启动时 SensorService 尚未就绪属正常现象，静默退避重试，不再立刻报错
+                        RetryRegister(mSensor, EnableSensorType, 1);
+                    }
+                });
 
             }
             catch (Exception ex)
@@ -514,6 +530,50 @@ namespace WheelSimu
             }
 
 
+        }
+
+        /// <summary>
+        /// 主线程退避重试注册传感器。冷启动时首次注册失败是常见现象（SensorService/HAL 尚未就绪），
+        /// 故前几次失败静默处理，只有全部重试都失败才提示用户。
+        /// </summary>
+        private void RetryRegister(Sensor sensor, SensorType type, int attempt)
+        {
+            if (!steerEnabled || mSensorManager == null) return;
+
+            int delayMs = 250 * (1 << (attempt - 1));   // 250/500/1000/2000/4000ms
+            _mainHandler.PostDelayed(() =>
+            {
+                if (!steerEnabled || mSensorManager == null) return;
+
+                if (mSensorManager.RegisterListener(this, sensor, SensorDelay.Ui))
+                {
+                    ClearSensorError();
+                    return;
+                }
+
+                if (attempt < SENSOR_RETRY_MAX)
+                {
+                    RetryRegister(sensor, type, attempt + 1);
+                }
+                else
+                {
+                    _sensorErrShown = true;
+                    RunOnUiThread(() => textView3.Text = SensorName(type) + "传感器注册失败，请重启 App");
+                }
+            }, delayMs);
+        }
+
+        /// <summary>注册成功后，把先前写上的传感器错误提示从状态行清掉，避免残留误导。</summary>
+        private void ClearSensorError()
+        {
+            if (!_sensorErrShown) return;
+            _sensorErrShown = false;
+            RunOnUiThread(() =>
+            {
+                var t = textView3?.Text;
+                if (t != null && (t.Contains("传感器") || t.Contains("监听")))
+                    textView3.Text = "";
+            });
         }
 
         /// <summary>传感器类型的中文名（报错提示用）</summary>
@@ -590,6 +650,10 @@ namespace WheelSimu
 
         private void StartSensors()
         {
+            // 幂等：先注销本 listener 的所有注册。否则 OnCreate + OnResume 各注册一次，
+            // 同一 listener 会挂多个 SensorEventQueue，传感器回调被重复触发（角度/圈数累积翻倍）。
+            mSensorManager?.UnregisterListener(this);
+
             if (SensorMode == 1)
                 StartSensor(Android.Hardware.SensorType.Gravity);
             if (SensorMode == 3)
