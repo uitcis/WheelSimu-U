@@ -273,10 +273,17 @@ public sealed class WinUHidWheelDeviceManager : IDisposable
             if (handbrake > 0) buttons |= BTN_HANDBRAKE;
 
             // 自动挡 P/D/N/R（保持式：一直按住才能前进/倒车/驻车）
-            if (autoDr == 2) buttons |= BTN_AUTO_P;   // P = 驻车
-            else if (autoDr == 1) buttons |= BTN_AUTO_D;  // D = 前进
-            else if (autoDr == 0) buttons |= BTN_AUTO_N;  // N = 空挡
-            else if (autoDr == -1) buttons |= BTN_AUTO_R; // R = 倒车
+            // 仅 gearMode==1（真实自动挡）生效。其它模式下手机端 autoDr 恒为 0，
+            // 若不加判断就会把 BTN_AUTO_N(Button6) 每帧持续置位——一旦这些按钮位
+            // 在游戏里被绑定到功能上（如 FH5 把 Button4/5 绑成切换视角/喇叭），
+            // 就会表现为"按键持续触发"。
+            if (gearMode == 1)
+            {
+                if (autoDr == 2) buttons |= BTN_AUTO_P;       // P = 驻车
+                else if (autoDr == 1) buttons |= BTN_AUTO_D;  // D = 前进
+                else if (autoDr == 0) buttons |= BTN_AUTO_N;  // N = 空挡
+                else if (autoDr == -1) buttons |= BTN_AUTO_R; // R = 倒车
+            }
 
             // 手动挡挡位（-1=R, 1..6），5档(3)/6档(4) 共用（手机端最大仅 6 挡）
             if (gearMode == 3 || gearMode == 4)

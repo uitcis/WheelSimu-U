@@ -213,9 +213,13 @@ public sealed class WinUHidDeviceManager : IDisposable
                 // 手刹（独立按钮，不与挡位冲突）
                 if (handbrake > 0) report.ButtonsMain |= 0x80;      // Menu = 手刹
 
-                // 自动挡（gearMode=1）：D=A（前进），R=X（倒车），保持式
-                if (autoDr == 1) report.ButtonsMain |= 0x01;        // A = D
-                else if (autoDr == -1) report.ButtonsMain |= 0x04;  // X = R
+                // 自动挡（保持式；仅 gearMode==1 真实自动挡）：D=A（前进），R=X（倒车）
+                // 加 gearMode 判断避免其它模式下误发保持式按钮导致游戏侧持续触发
+                if (gearMode == 1)
+                {
+                    if (autoDr == 1) report.ButtonsMain |= 0x01;        // A = D
+                    else if (autoDr == -1) report.ButtonsMain |= 0x04;  // X = R
+                }
 
                 // 手动挡（gearMode=3/4）：行业 H 挡标准顺序
                 // R=Back, 1=LB, 2=RB, 3=A, 4=B, 5=X, 6=Y

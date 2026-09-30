@@ -41,6 +41,12 @@ public partial class MainForm : Form
     int clientCount;
     DateTime lastDataLog = DateTime.MinValue;
 
+    // 停发看门狗：手机停止上报（切后台/锁屏/断网/断开）时，
+    // WinUHid 设备会永久保留最后一份报告——若那份报告里有按钮为"按下"，
+    // 游戏侧就会表现为"按键持续触发"。超时后持续下发中立帧把它清掉。
+    volatile int _lastMsgTick;
+    System.Windows.Forms.Timer? _watchdog;
+
     // ==================== UI 控件 ====================
     RichTextBox rtbLogs = null!;
     StatusStrip statusBar = null!;
@@ -297,6 +303,11 @@ public partial class MainForm : Form
         _cts = new CancellationTokenSource();
         _ = RunServer(_cts.Token);
 
+        // 停发看门狗：超过 600ms 没收到手机数据就下发中立帧（见 SendNeutralIfStale）
+        _watchdog = new System.Windows.Forms.Timer { Interval = 250 };
+        _watchdog.Tick += (s, e) => SendNeutralIfStale();
+        _watchdog.Start();
+
         if (ShowInTaskbar)
         {
             Log("关闭窗口将最小化到托盘，右键托盘图标可退出");
@@ -385,6 +396,7 @@ public partial class MainForm : Form
         }
 
         // 真正退出
+        try { _watchdog?.Stop(); _watchdog?.Dispose(); } catch { }
         _cts?.Cancel();
 
         // 停止蓝牙广播
@@ -685,6 +697,7 @@ public partial class MainForm : Form
     void ProcessMessage(string msg)
     {
         Interlocked.Increment(ref msgCount);
+        _lastMsgTick = Environment.TickCount;   // 喂看门狗：有数据即视为在线
 
         double angle = 0;
         int throttle = 0, brake = 0, clutch = 0, handbrake = 0;
@@ -767,6 +780,27 @@ public partial class MainForm : Form
         else if (_outputMode == OutputMode.WinUHidWheel)
         {
             if (wheelReady) wheelMgr.Report(angle, throttle, brake, clutch, handbrake, gearUp, gearDown, gearMode, autoDr, gearValue);
+        }
+    }
+
+    /// <summary>
+    /// 停发看门狗：超过 600ms 未收到手机数据时下发中立帧（角度回中、踏板 0、无按钮、无挡位）。
+    /// 目的：手机切后台/锁屏/网卡/断开时，若最后一份报告里带着"按住的按钮"，
+    /// 设备会一直保留该状态 → 游戏内按键持续触发。持续下发中立帧即可消除。
+    /// </summary>
+    void SendNeutralIfStale()
+    {
+        int last = _lastMsgTick;
+        if (last == 0) return;                                   // 从未收到过数据，不干预
+        if (unchecked(Environment.TickCount - last) < 600) return; // 600ms 内有数据 → 手机在线
+
+        if (_outputMode == OutputMode.WinUHid)
+        {
+            if (xoneReady) xoneMgr.Report(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        }
+        else if (_outputMode == OutputMode.WinUHidWheel)
+        {
+            if (wheelReady) wheelMgr.Report(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
         }
     }
 
